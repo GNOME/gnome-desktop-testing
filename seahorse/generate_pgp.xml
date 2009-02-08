@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<ldtp>
+  <logfile>/dev/null</logfile>
+  <group>
+    <testcaseid>GenerateKeys</testcaseid>
+    <script>
+      <testcase>GeneratePGPKey</testcase>
+      <name>./seahorse/generate_pgp.py</name>
+      <data>./seahorse/data/generate_pgp.xml</data>
+    </script>
+  </group>
+</ldtp>

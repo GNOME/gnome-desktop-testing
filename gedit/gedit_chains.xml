@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<ldtp>
+  <logfile>/dev/null</logfile>
+  <group>
+    <testcaseid>SavedAsciiTestCase</testcaseid>
+    <script>
+      <testcase>SavedAsciiTestCase</testcase>
+      <name>./gedit/gedit_chains.py</name>
+      <data>./gedit/data/ascii_data.xml</data>
+    </script>
+  </group>
+  <group>
+      <testcaseid>SavedUTF8TestCase</testcaseid>
+    <script>
+      <testcase>SavedUTF8TestCase</testcase>
+      <name>./gedit/gedit_chains.py</name>
+      <data>./gedit/data/utf8_data.xml</data>
+    </script>
+  </group>
+</ldtp>
