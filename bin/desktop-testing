@@ -189,7 +189,7 @@ def main(args=sys.argv):
     usage = "%prog [OPTIONS]"
     parser = OptionParser(usage=usage)
 
-    default_target = "~/.ubuntu-desktop-tests"
+    default_target = "~/.gnome-desktop-tests"
     default_log_level = "critical"
 
     parser.add_option("-l", "--log",
