@@ -67,10 +67,23 @@ def is_valid_application_directory(application_directory, applications):
 
     return True
 
-def is_valid_suite_file(suite_file, suites):
+def is_valid_suite(suite_file, suites, files):
+   
+    # If the user has specified a file, but not a suite, skip
+    if suites is None and files is not None:
+        return False
+    
     # Support specifying suites with or without the extension
+    # but do not include backup files LP#326177
     if suites is not None:
-        suites = [os.path.splitext(s)[0] + ".xml" for s in suites]
+        suites_clean = []
+        for s in suites:
+            if os.path.splitext(s)[1] is '':
+                suites_clean.append(s + ".xml")
+            else:
+                suites_clean.append(s)
+    
+        suites = suites_clean
 
     suite = os.path.basename(suite_file)
     if suites is not None and suite not in suites:
@@ -91,7 +104,30 @@ def is_valid_suite_file(suite_file, suites):
 
     return True
 
-def filter_suite_files(applications, suites):
+def is_valid_suite_file(file, suites):
+
+    suite = os.path.basename(file)
+
+    pattern = r"[a-z0-9][-_a-z0-9+.]*.xml"
+    if not re.match(pattern, suite, re.I):
+        logging.debug("Suite name `%s' does not match pattern: %s",
+            file, pattern)
+        return False
+
+    if not os.path.isfile(file):
+        logging.debug("Suite file `%s' is not a file",
+            file)
+        return False
+
+    if file in suites:
+        logging.debug("Suite file is already in the list",
+                file)
+        return False
+    
+    return True
+
+
+def filter_suite_files(applications, suites, files):
     if not os.path.isdir(TESTS_SHARE):
         error("Share directory `%s' is not a directory.", TESTS_SHARE)
 
@@ -105,10 +141,16 @@ def filter_suite_files(applications, suites):
         # Filter suites
         for suite in os.listdir(application_directory):
             suite_file = os.path.join(application_directory, suite)
-            if not is_valid_suite_file(suite_file, suites):
+            if not is_valid_suite(suite_file, suites, files):
                 continue
 
             suite_files.append(suite_file)
+
+    if files is not None:
+        for file in files:
+            if not is_valid_suite_file(file, suite_files):
+                continue
+            suite_files.append(file)
 
     return suite_files
 
@@ -147,7 +189,7 @@ def main(args=sys.argv):
     usage = "%prog [OPTIONS]"
     parser = OptionParser(usage=usage)
 
-    default_target = "~/.gnome-desktop-tests"
+    default_target = "~/.ubuntu-desktop-tests"
     default_log_level = "critical"
 
     parser.add_option("-l", "--log",
@@ -168,6 +210,11 @@ def main(args=sys.argv):
                       default=None,
                       help="Suite name to test within applications. Option "
                            "can be repeated and default to all suites")
+    parser.add_option("-f", "--file",
+                      action="append",
+                      type="string",
+                      default=None,
+                      help="XML file name of the suite to test within applications.")
     parser.add_option("-t", "--target",
                       metavar="FILE",
                       default=default_target,
@@ -200,7 +247,7 @@ def main(args=sys.argv):
             options.target)
 
     # Filter suite files from project directory
-    suite_files = filter_suite_files(options.application, options.suite)
+    suite_files = filter_suite_files(options.application, options.suite, options.file)
 
     # Run filtered suite file
     for suite_file in suite_files:

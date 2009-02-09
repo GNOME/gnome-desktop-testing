@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <ldtp>
   <logfile>/dev/null</logfile>
+  <screenshotdir>/tmp/ldtp-screenshots</screenshotdir>
   <group>
     <testcaseid>SavedAsciiTestCase</testcaseid>
     <script>

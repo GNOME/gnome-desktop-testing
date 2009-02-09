@@ -1,13 +1,12 @@
-from ooldtp import *
-from ldtp import *
-from ldtputils import *
-from time import *
+import ldtp 
+import ldtputils 
+from time import time 
 
-from gnometesting.gnome import *
+from desktoptesting.gnome import Seahorse
 
 try:
   
-    dataXml  = LdtpDataFileParser(datafilename)    
+    dataXml  = ldtputils.LdtpDataFileParser(datafilename)    
     name     = dataXml.gettagvalue("name")[0]
     email    = dataXml.gettagvalue("email")[0]
     comment  = dataXml.gettagvalue("comment")[0]
@@ -27,9 +26,9 @@ try:
  
     elapsed = stop_time - start_time
     
-    log ('elapsed_time: ' + str(elapsed), 'comment')
+    ldtp.log (str(elapsed), 'time')
     
-except LdtpExecutionError, msg:
+except ldtp.LdtpExecutionError, msg:
     raise
 
 

@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
 
-from ooldtp import *
-from ldtp import *
-from ldtputils import *
+import ldtp
+import ldtputils
 
-from time import *
+from time import time, gmtime, strftime
 
-from gnometesting.gnome import *
-from gnometesting.check import *
+from desktoptesting.gnome import GEdit
+from desktoptesting.check import FileComparison
 
 try:
 
     test = GEdit()
 
-    dataXml  = LdtpDataFileParser(datafilename)    
+    dataXml  = ldtputils.LdtpDataFileParser(datafilename)    
     oracle = dataXml.gettagvalue("oracle")[0]
     chain  = dataXml.gettagvalue("string")[0]
     test_file = strftime("/tmp/" + "%Y%m%d_%H%M%S" + ".txt", gmtime((time())))
@@ -32,13 +31,13 @@ try:
     testcheck = FileComparison(oracle, test_file)
     check = testcheck.perform_test()
 
-    log ('elapsed_time: ' + str(elapsed), 'comment')
+    ldtp.log (str(elapsed), 'time')
     
-    if check == FAIL:
-        log ('Files differ.', 'CAUSE')
-        log ('Files differ.', 'ERROR')
+    if check == desktoptesting.check.FAIL:
+        ldtp.log ('Files differ.', 'cause')
+        ldtp.log ('Files differ.', 'error')
 
-except LdtpExecutionError, msg:
+except ldtp.LdtpExecutionError, msg:
     raise
 
 
