@@ -6,7 +6,7 @@ import ldtputils
 from time import time, gmtime, strftime
 
 from desktoptesting.gnome import GEdit
-from desktoptesting.check import FileComparison
+from desktoptesting.check import FileComparison, FAIL
 
 try:
 
@@ -33,11 +33,11 @@ try:
 
     ldtp.log (str(elapsed), 'time')
     
-    if check == desktoptesting.check.FAIL:
+    if check == FAIL:
         ldtp.log ('Files differ.', 'cause')
         ldtp.log ('Files differ.', 'error')
 
-except ldtp.LdtpExecutionError, msg:
+except ldtp.LdtpExecutionError:
     raise
 
 
