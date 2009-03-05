@@ -13,7 +13,8 @@ from subprocess import Popen, PIPE
 
 # Globals
 TESTS_SHARE = "."
-
+TESTS_HOME  = os.environ["HOME"] + "/.desktop-testing"
+SCREENSHOTS_SHARE = "/tmp/ldtp-screenshots"
 
 def error(message, *args):
     message = "Error: %s\n" % message
@@ -91,7 +92,7 @@ def is_valid_suite(suite_file, suites, files):
             suite, ", ".join(suites))
         return False
 
-    pattern = r"[a-z0-9][-_a-z0-9+.]*.xml"
+    pattern = r"[a-z0-9][-_a-z0-9+.]*.xml$"
     if not re.match(pattern, suite, re.I):
         logging.debug("Suite name `%s' does not match pattern: %s",
             suite, pattern)
@@ -127,26 +128,26 @@ def is_valid_suite_file(file, suites):
     return True
 
 
-def filter_suite_files(applications, suites, files):
-    if not os.path.isdir(TESTS_SHARE):
-        error("Share directory `%s' is not a directory.", TESTS_SHARE)
+def filter_suite_files(applications, suites, files, folder):
 
     # Filter applications
     suite_files = []
-    for application in os.listdir(TESTS_SHARE):
-        application_directory = os.path.join(TESTS_SHARE, application)
-        if not is_valid_application_directory(application_directory, applications):
-            continue
-
-        # Filter suites
-        for suite in os.listdir(application_directory):
-            suite_file = os.path.join(application_directory, suite)
-            if not is_valid_suite(suite_file, suites, files):
+   
+    if folder is not None:
+        for application in os.listdir(folder):
+            application_directory = os.path.join(folder, application)
+            if not is_valid_application_directory(application_directory, applications):
                 continue
 
-            suite_files.append(suite_file)
+            # Filter suites
+            for suite in os.listdir(application_directory):
+                suite_file = os.path.join(application_directory, suite)
+                if not is_valid_suite(suite_file, suites, files):
+                    continue
 
-    if files is not None:
+                suite_files.append(suite_file)
+
+    if files is not None and folder is None:
         for file in files:
             if not is_valid_suite_file(file, suite_files):
                 continue
@@ -163,14 +164,35 @@ def run_suite_file(suite_file, log_file):
         % (conf_file, suite_file, log_file)
     safe_run_command(command)
 
-def convert_log_file(log_file, html_file):
+def convert_log_file(log_file, html_file, target_directory):
     xsl_file = os.path.join(TESTS_SHARE, "report.xsl")
     if not os.path.exists(xsl_file):
         error("XSL file `%s' does not exist.", xsl_file)
 
+    if os.path.exists(SCREENSHOTS_SHARE):
+        screenshot_dir = target_directory + "/screenshots"
+
+        if not os.path.exists(screenshot_dir):            
+            safe_make_directory(screenshot_dir)
+
+        if len(os.listdir(SCREENSHOTS_SHARE)) > 0:
+            command = "cp " + SCREENSHOTS_SHARE + "/* " + screenshot_dir
+            safe_run_command(command)
+
+    log_file_tmp = log_file + ".tmp"
+    o = open(log_file_tmp, "w")
+    data = open(log_file).read()
+    o.write(re.sub(SCREENSHOTS_SHARE, "screenshots", data))
+    o.flush()
+    o.close()
+    
+    os.remove(log_file)
+    os.rename(log_file_tmp, log_file)
+
     command = "xsltproc -o %s %s %s" \
         % (html_file, xsl_file, log_file)
     safe_run_command(command)
+
 
 def process_suite_file(suite_file, target_directory):
     application_name = os.path.basename(os.path.dirname(suite_file))
@@ -183,13 +205,14 @@ def process_suite_file(suite_file, target_directory):
     run_suite_file(suite_file, log_file)
 
     html_file = log_file.replace(".log", ".html")
-    convert_log_file(log_file, html_file)
+    convert_log_file(log_file, html_file, application_target)
+
 
 def main(args=sys.argv):
     usage = "%prog [OPTIONS]"
     parser = OptionParser(usage=usage)
 
-    default_target = "~/.gnome-desktop-tests"
+    default_target = "~/.desktop-testing"
     default_log_level = "critical"
 
     parser.add_option("-l", "--log",
@@ -247,7 +270,16 @@ def main(args=sys.argv):
             options.target)
 
     # Filter suite files from project directory
-    suite_files = filter_suite_files(options.application, options.suite, options.file)
+
+    if not os.path.isdir(TESTS_SHARE): 
+        error("Share directory `%s' is not a directory.", TESTS_SHARE)
+    else:
+        suite_files = filter_suite_files(options.application, options.suite, options.file, TESTS_SHARE)
+    
+    if os.path.isdir(TESTS_HOME):
+        suite_files += filter_suite_files(options.application, options.suite, options.file, TESTS_HOME)
+
+    suite_files += filter_suite_files(options.application, options.suite, options.file, None)
 
     # Run filtered suite file
     for suite_file in suite_files:

@@ -243,7 +243,8 @@ class Seahorse(Application):
  
         try:
             ldtp.waittillguiexist(gnome_constants.SH_DLG_GENERATING_PGP)
-            ldtp.waittillguinotexist(gnome_constants.SH_DLG_GENERATING_PGP)
+            while ldtp.guiexist(gnome_constants.SH_DLG_GENERATING_PGP) == 1:
+                ldtp.wait(1)
         except ldtp.LdtpExecutionError:
             raise ldtp.LdtpExecutionError, "The new pgp generating key dialog was not found."
 

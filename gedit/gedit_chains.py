@@ -34,8 +34,8 @@ try:
     ldtp.log (str(elapsed), 'time')
     
     if check == FAIL:
-        ldtp.log ('Files differ.', 'cause')
-        ldtp.log ('Files differ.', 'error')
+        ldtp.logFailures ("Files differ")
+        ldtp.logFailures ("Files differ", False, "fail") 
 
 except ldtp.LdtpExecutionError:
     raise
