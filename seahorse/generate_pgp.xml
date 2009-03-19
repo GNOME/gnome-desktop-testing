@@ -1,13 +1,18 @@
 <?xml version="1.0"?>
-<ldtp>
-  <logfile>/dev/null</logfile>
-  <screenshotdir>/tmp/ldtp-screenshots</screenshotdir>
-  <group>
-    <testcaseid>GenerateKeys</testcaseid>
-    <script>
-      <testcase>GeneratePGPKey</testcase>
-      <name>./seahorse/generate_pgp.py</name>
-      <data>./seahorse/data/generate_pgp.xml</data>
-    </script>
-  </group>
-</ldtp>
+<suite name="Generate PGP Keys">
+  <class>generate_pgp.SeahorsePGP</class>
+  <description>
+    Test that generates a PGP file
+  </description>
+  <case name="Generate PGP">
+    <method>test_generate_pgp</method>
+    <description>Generates a PGP key with default options</description>
+    <args>
+      <name>Tester Tester</name>
+      <email>tester@testworld.org</email>
+      <comment>This is a test</comment>
+      <passphrase>passphrase</passphrase>
+    </args>
+  </case>
+</suite>
+

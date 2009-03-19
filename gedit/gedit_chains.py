@@ -8,37 +8,19 @@ from time import time, gmtime, strftime
 from desktoptesting.gnome import GEdit
 from desktoptesting.check import FileComparison, FAIL
 
-try:
+class GEditChain(GEdit):
+    def testChain(self, oracle=None, chain=None):
+        test_file = strftime(
+            "/tmp/" + "%Y%m%d_%H%M%S" + ".txt", gmtime((time())))
 
-    test = GEdit()
+        self.write_text(chain)
+        self.save(test_file)
 
-    dataXml  = ldtputils.LdtpDataFileParser(datafilename)    
-    oracle = dataXml.gettagvalue("oracle")[0]
-    chain  = dataXml.gettagvalue("string")[0]
-    test_file = strftime("/tmp/" + "%Y%m%d_%H%M%S" + ".txt", gmtime((time())))
-    
-    start_time = time()
-    
-    test.open()
-    test.write_text(chain)
-    test.save(test_file)
-    test.exit()
+        testcheck = FileComparison(oracle, test_file)
 
-    stop_time = time()
-    
-    elapsed = stop_time - start_time
-    
-    testcheck = FileComparison(oracle, test_file)
-    check = testcheck.perform_test()
+        if testcheck.perform_test() == FAIL:
+            raise AssertionError, "Files differ"
 
-    ldtp.log (str(elapsed), 'time')
-    
-    if check == FAIL:
-        ldtp.logFailures ("Files differ")
-        ldtp.logFailures ("Files differ", False, "fail") 
-
-except ldtp.LdtpExecutionError:
-    raise
-
-
-
+if __name__ == "__main__":
+    gedit_chains_test = GEditChain()
+    gedit_chains_test.run()

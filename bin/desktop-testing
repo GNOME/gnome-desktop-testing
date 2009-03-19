@@ -4,12 +4,16 @@ import os
 import re
 import sys
 import logging
+import xml.dom.minidom
+import ldtp
+import ldtputils
+import traceback
 
 from logging import StreamHandler, FileHandler, Formatter
 from optparse import OptionParser
 from stat import ST_MODE, S_IMODE
 from subprocess import Popen, PIPE
-
+from time import time, gmtime, strftime
 
 # Globals
 TESTS_SHARE = "."
@@ -109,7 +113,7 @@ def is_valid_suite_file(file, suites):
 
     suite = os.path.basename(file)
 
-    pattern = r"[a-z0-9][-_a-z0-9+.]*.xml"
+    pattern = r"[a-z0-9][-_a-z0-9+.]*.xml$"
     if not re.match(pattern, suite, re.I):
         logging.debug("Suite name `%s' does not match pattern: %s",
             file, pattern)
@@ -157,26 +161,22 @@ def filter_suite_files(applications, suites, files, folder):
 
 def run_suite_file(suite_file, log_file):
     conf_file = os.path.join(TESTS_SHARE, "conffile.ini")
-    if not os.path.exists(conf_file):
-        error("Configuration file `%s' does not exist.", conf_file)
+    runner = TestSuiteRunner(suite_file)
+    results = runner.run()
+    f = open(log_file, 'w')
+    f.write(results)
+    f.close()
 
-    command = "ldtprunner --conf=%s %s > %s" \
-        % (conf_file, suite_file, log_file)
-    safe_run_command(command)
-
-def convert_log_file(log_file, html_file, target_directory):
-    xsl_file = os.path.join(TESTS_SHARE, "report.xsl")
-    if not os.path.exists(xsl_file):
-        error("XSL file `%s' does not exist.", xsl_file)
+def convert_log_file(log_file):
 
     if os.path.exists(SCREENSHOTS_SHARE):
-        screenshot_dir = target_directory + "/screenshots"
+        screenshot_dir = os.path.dirname(log_file) + "/screenshots"
 
         if not os.path.exists(screenshot_dir):            
             safe_make_directory(screenshot_dir)
 
         if len(os.listdir(SCREENSHOTS_SHARE)) > 0:
-            command = "cp " + SCREENSHOTS_SHARE + "/* " + screenshot_dir
+            command = "mv " + SCREENSHOTS_SHARE + "/* " + screenshot_dir
             safe_run_command(command)
 
     log_file_tmp = log_file + ".tmp"
@@ -189,11 +189,16 @@ def convert_log_file(log_file, html_file, target_directory):
     os.remove(log_file)
     os.rename(log_file_tmp, log_file)
 
+    xsl_file = os.path.join(TESTS_SHARE, "report.xsl")
+    if not os.path.exists(xsl_file):
+        error("XSL file `%s' does not exist.", xsl_file)
+
+    html_file = log_file.replace(".log", ".html")
+
     command = "xsltproc -o %s %s %s" \
         % (html_file, xsl_file, log_file)
     safe_run_command(command)
-
-
+ 
 def process_suite_file(suite_file, target_directory):
     application_name = os.path.basename(os.path.dirname(suite_file))
     application_target = os.path.join(target_directory, application_name)
@@ -204,9 +209,7 @@ def process_suite_file(suite_file, target_directory):
         suite_name.replace(".xml", ".log"))
     run_suite_file(suite_file, log_file)
 
-    html_file = log_file.replace(".log", ".html")
-    convert_log_file(log_file, html_file, application_target)
-
+    convert_log_file(log_file)
 
 def main(args=sys.argv):
     usage = "%prog [OPTIONS]"
@@ -285,7 +288,173 @@ def main(args=sys.argv):
     for suite_file in suite_files:
         process_suite_file(suite_file, options.target)
 
+
     return 0
+
+class TestRunner:
+    def __init__(self):
+        self.result = {}
+    def add_results_to_node(self, node):
+        if self.result == {}: return
+        result = node.ownerDocument.createElement("result")
+        for key, val in self.result.items():
+            if not isinstance(val, list):
+                val = [val]
+            for item in val:
+                n = node.ownerDocument.createElement(key)
+                n.appendChild(n.ownerDocument.createTextNode(str(item)))
+                result.appendChild(n)
+                
+        node.appendChild(result)
+
+    def append_result(self, key, value):
+        l = self.result.get(key, [])
+        l.append(value)
+        self.result[key] = l
+
+    def set_result(self, key, value):
+        self.result[key] = value
+
+    def append_screenshot(self):
+        _logFile = "%s/screenshot-%s.png" % (SCREENSHOTS_SHARE,
+                                             strftime ("%m-%d-%Y-%H-%M-%s"))
+        safe_make_directory(SCREENSHOTS_SHARE)
+        ldtputils.imagecapture(outFile = _logFile)
+        self.append_result('screenshot', _logFile)
+
+
+class TestCaseRunner(TestRunner):
+    def __init__(self, obj, xml_node):
+        TestRunner.__init__(self)
+        self.xml_node = xml_node
+        self.args = {}
+        self.name = xml_node.getAttribute('name')
+        self.test_func = getattr(
+            obj, xml_node.getElementsByTagName('method')[0].firstChild.data)
+        args_element = xml_node.getElementsByTagName('args')
+        if args_element:
+            self._get_args(args_element[0])
+
+    def _get_args(self, node):
+        for n in node.childNodes:
+            if n.nodeType != n.ELEMENT_NODE:
+                continue
+            self.args[n.tagName.encode('ascii')] = n.firstChild.data
+
+    def run(self, logger):
+        starttime = time()
+        try:
+            self.test_func(**self.args)
+        except AssertionError, e:
+            # The test failed.
+            self.append_result('message', str(e))
+            self.append_result('stacktrace', traceback.format_exc())
+            self.append_screenshot()
+            self.set_result('pass', 0)
+        except Exception, e:
+            # There was an unrelated error.
+            self.append_result('message', str(e))
+            self.append_result('stacktrace', traceback.format_exc())
+            self.append_screenshot()
+            self.set_result('error', 1)
+        else:
+            self.set_result('pass', 1)
+        finally:
+            self.set_result('time', time() - starttime)
+        
+        self.add_results_to_node(self.xml_node)
+        
+class TestSuiteRunner(TestRunner):
+    def __init__(self, suite_file, loggerclass=None):
+        TestRunner.__init__(self)
+        self.dom = xml.dom.minidom.parse(suite_file)
+        self._strip_whitespace(self.dom.documentElement)
+        clsname, modname = None, None
+        case_runners = []
+        for node in self.dom.documentElement.childNodes:
+            if node.nodeType != node.ELEMENT_NODE:
+                continue
+            if node.tagName == 'class':
+                modname, clsname = node.firstChild.data.rsplit('.', 1)
+            if node.tagName == 'case':
+                logging.debug("Adding case %s to current test suite.", node.getAttribute("name"))
+                case_runners.append(node)
+        if None in (clsname, modname):
+            raise Exception, "Missing a suite class"
+
+        # Suite file and module are suppose to be in the same directory
+        sys.path.insert(1, os.path.dirname(suite_file))
+        logging.debug("Modname: %s", modname)
+        mod = __import__(modname)
+        sys.path.pop(1)
+
+        cls = getattr(mod, clsname)
+        
+        self.testsuite = cls()
+        
+        self.case_runners = \
+            [TestCaseRunner(self.testsuite, c) for c in case_runners]
+    
+    def run(self, loggerclass=None, setup_once=True):
+        try:
+            self._run(loggerclass, setup_once)
+        except Exception, e:
+            # There was an unrelated error.
+            self.append_result('message', str(e))
+            self.append_result('stacktrace', traceback.format_exc())
+            self.set_result('error', 1)
+            try:
+                self.testsuite.teardown()
+            except:
+                pass
+
+        self.add_results_to_node(self.dom.documentElement)
+
+        return self.dom.toprettyxml('  ')
+            
+    def _run(self, loggerclass, setup_once):
+        if loggerclass:
+            logger = loggerclass()
+        else:
+            logger = ldtp
+
+        if setup_once:
+            # Set up the environment.
+            self.testsuite.setup()
+
+        firsttest = True
+        for testcase in self.case_runners:
+            if not setup_once:
+                # Set up the app for each test, if requested.
+                self.testsuite.setup()
+            if not firsttest:
+                # Clean up from previous run.
+                self.testsuite.cleanup()
+            firsttest = False
+            testcase.run(logger)
+            if not setup_once:
+                # Teardown upthe app for each test, if requested.
+                self.testsuite.teardown()
+
+        if setup_once:
+            # Tear down after entire suite.
+            self.testsuite.teardown()
+
+    def _strip_whitespace(self, element):
+        if element is None: 
+            return
+        sibling = element.firstChild
+        while sibling:
+            nextSibling = sibling.nextSibling
+            if sibling.nodeType == sibling.TEXT_NODE:
+                stripped = sibling.data.strip()
+                if stripped == '':
+                    element.removeChild(sibling)
+                else:
+                    sibling.data = stripped
+            else:
+                self._strip_whitespace(sibling)
+            sibling = nextSibling
 
 if __name__ == "__main__":
     sys.exit(main())

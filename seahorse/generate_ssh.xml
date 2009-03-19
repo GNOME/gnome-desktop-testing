@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<suite name="Generate SSH Keys">
+  <class>generate_ssh.SeahorseSSH</class>
+  <description>
+    Test that generates a SSH key
+  </description>
+  <case name="Generate SSH">
+    <method>test_generate_ssh</method>
+    <description>Generates a SSH key with default options</description>
+    <args>
+        <description>This is a test</description>
+        <set_up>False</set_up>
+        <passphrase>passphrase</passphrase>
+    </args>
+  </case>
+</suite>
+
+
+

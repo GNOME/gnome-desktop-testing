@@ -1,21 +1,23 @@
 <?xml version="1.0"?>
-<ldtp>
-  <logfile>/dev/null</logfile>
-  <screenshotdir>/tmp/ldtp-screenshots</screenshotdir>
-  <group>
-    <testcaseid>SavedAsciiTestCase</testcaseid>
-    <script>
-      <testcase>SavedAsciiTestCase</testcase>
-      <name>./gedit/gedit_chains.py</name>
-      <data>./gedit/data/ascii_data.xml</data>
-    </script>
-  </group>
-  <group>
-      <testcaseid>SavedUTF8TestCase</testcaseid>
-    <script>
-      <testcase>SavedUTF8TestCase</testcase>
-      <name>./gedit/gedit_chains.py</name>
-      <data>./gedit/data/utf8_data.xml</data>
-    </script>
-  </group>
-</ldtp>
+<suite name="gedit chains">
+  <class>gedit_chains.GEditChain</class>
+  <description>
+    Tests which verify gedit's save file functionality.
+  </description>
+  <case name="Unicode Tests">
+    <method>testChain</method>
+    <description>Test Unicode text saving.</description>
+    <args>
+      <oracle>./gedit/data/utf8.txt</oracle>
+      <chain>This is a japanese string: 広告掲載 - ビジネス</chain>
+    </args>
+  </case>
+  <case name="ASCII Test">
+    <method>testChain</method>
+    <description>Test ASCII text saving.</description>
+    <args>
+      <oracle>./gedit/data/ascii.txt</oracle>
+      <chain>This is a very basic string!</chain>
+    </args>
+  </case>
+</suite>
