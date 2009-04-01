@@ -162,6 +162,23 @@
                         </xsl:for-each>
                       </tr>
                   </xsl:for-each>
+                  
+                  <xsl:for-each select="suite/result">
+                      <tr></tr>
+                      <tr>
+                          <td colspan="7"><font color="red"><h2><b>The suite had an error in the setup, teardown or cleanup methods.</b></h2></font></td>
+                          <td>
+                            <xsl:call-template name="stacktemplate">
+                                <xsl:with-param name="stackid">
+                                    <xsl:value-of select="string('testsuite_stacktrace')" />
+                                </xsl:with-param>
+                                <xsl:with-param name="stacktext">
+                                    <xsl:value-of select="child::stacktrace/child::text()" />
+                                </xsl:with-param>
+                            </xsl:call-template>
+                        </td>                        
+                      </tr>
+                  </xsl:for-each>
                 </tbody>
               </table>
               <p>
