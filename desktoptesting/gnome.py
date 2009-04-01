@@ -83,8 +83,6 @@ class Application:
         """
         Given an application, it tries to open it.
          
-        @type app_name: string
-        @param app_name: The command to start the application.
         """
         ldtp.launchapp(self.LAUNCHER)
 
