@@ -1,0 +1,3 @@
+[Desktop Entry]
+Name=GNOME-OSTree installed tests
+Exec=/usr/bin/gnome-ostree-run-installed-tests
