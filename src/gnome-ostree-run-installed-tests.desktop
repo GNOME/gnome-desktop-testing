@@ -1,3 +1,6 @@
 [Desktop Entry]
+Encoding=UTF-8
 Name=GNOME-OSTree installed tests
-Exec=/usr/bin/gnome-ostree-run-installed-tests
+Exec=gnome-ostree-run-installed-tests
+Terminal=false
+Type=Application
