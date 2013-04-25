@@ -94,8 +94,10 @@ function runTestsInDirectory(file) {
     }
 }
 
-let path = Gio.File.new_for_path('/usr/share/installed-tests');
-runTestsInDirectory(path);
+let testDirs = ARGV.slice();
+testDirs.forEach(function(path) {
+    runTestsInDirectory(Gio.File.new_for_path(path));
+});
 
 let rval;
 if (nFailedTests == 0) {
