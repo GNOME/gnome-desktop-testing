@@ -22,15 +22,15 @@ substitutions= \
 	-e s,@pkgdatadir\@,$(pkgdatadir), \
 	$(NULL)
 
-BUILT_SOURCES += gnome-ostree-integration-runner
+BUILT_SOURCES += gnome-desktop-testing-runner
 
-gnome-ostree-integration-runner: src/gnome-ostree-integration-runner.in Makefile
+gnome-desktop-testing-runner: src/gnome-desktop-testing-runner.in Makefile
 	sed $(substitutions) $< > $@.tmp && mv $@.tmp $@
 
-bin_PROGRAMS += gnome-ostree-integration-runner
+bin_PROGRAMS += gnome-desktop-testing-runner
 
 pkgjsdir = $(pkgdatadir)/js
-pkgjs_DATA = src/gnome-ostree-integration-runner.js
+pkgjs_DATA = src/gnome-desktop-testing-runner.js
 
 etcxdgautostartdir = $(sysconfdir)/xdg/autostart
-etcxdgautostart_DATA = src/gnome-ostree-integration-runner.desktop
+etcxdgautostart_DATA = src/gnome-desktop-testing.desktop
