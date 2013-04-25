@@ -23,4 +23,4 @@ export LD_LIBRARY_PATH="@pkglibdir@/${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export PKGDATADIR=@pkgdatadir@
 export PKGLIBDIR=@pkglibdir@
 
-exec gjs -I "${jsdir}" "${jsdir}/gnome-ostree-run-installed-tests.js" "$@"
+exec gjs -I "${jsdir}" "${jsdir}/gnome-ostree-integration-runner.js" "$@"

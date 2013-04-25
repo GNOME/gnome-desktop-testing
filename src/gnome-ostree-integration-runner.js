@@ -38,6 +38,8 @@ while ((info = e.next_file(cancellable)) != null) {
     let i = name.lastIndexOf(INSTALLED_TEST_SUFFIX);
     if (i == -1 || i != name.length - INSTALLED_TEST_SUFFIX.length)
 	continue;
+    if (name == 'gnome-ostree-run-installed-tests')
+	continue;
     let child = e.get_child(info);
     ntests += 1;
     print("Running test: " + child.get_path());
