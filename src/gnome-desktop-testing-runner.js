@@ -25,73 +25,80 @@ const TEST_SKIP_ECODE = 77;
 const TESTS_FAILED_MSGID = '0eee66bf98514369bef9868327a43cf1';
 const TESTS_SUCCESS_MSGID = '4d013788dd704743b826436c951e551d';
 
-let cancellable = null;
-let dirEnum;
-try {
-    let path = Gio.File.new_for_path('/usr/share/installed-tests');
-    dirEnum = path.enumerate_children('standard::name,standard::type',
-				      Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS,
-				      cancellable);
-} catch (e) {
-    if (e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND))
-	dirEnum = null;
-    else
-	throw e;
-}
-let info;
-let loop = GLib.MainLoop.new(null, true);
 let ntests = 0;
 let nSkippedTests = 0;
-let testSuccess = true;
-while (dirEnum != null && (info = dirEnum.next_file(cancellable)) != null) {
-    let name = info.get_name();
-    if (name.indexOf('.testmeta') < 0)
-	continue;
-    let child = dirEnum.get_child(info);
-    let childPath = child.get_path();
+let nFailedTests = 0;
 
-    let kdata = GLib.KeyFile.new();
-    kdata.load_from_file(childPath, 0);
-    let execKey = kdata.get_string('Test', 'Exec');
-    if (!execKey)
-	throw new Error("Missing Exec key in " + childPath);
-    let [success, testArgv] = GLib.shell_parse_argv(execKey);
-    print("Running test: " + childPath);
-
-    let pid;
-    [success,pid] = GLib.spawn_async(null, testArgv, null,
-					 GLib.SpawnFlags.DO_NOT_REAP_CHILD | GLib.SpawnFlags.SEARCH_PATH, null);
-    let errmsg = null;
-    let skipped = false;
-    GLib.child_watch_add(GLib.PRIORITY_DEFAULT, pid, function(pid, estatus) {
-	try {
-	    GLib.spawn_check_exit_status(estatus);
-	} catch (e) {
-	    if (e.domain == GLib.spawn_exit_error_quark() &&
-		e.code == TEST_SKIP_ECODE) {
-		print("Skipping test " + childPath);
-		nSkippedTests++;
-		skipped = true;
-	    } else {
-		errmsg = e.message;
-		testSuccess = false;
-	    }
-	} finally {
-	    loop.quit();
-	}
-    }, null);
-    loop.run();
-    if (!testSuccess) {
-	GSystem.log_structured("Test " + childPath + " failed: " + errmsg,
-                               ["MESSAGE_ID=" + TESTS_FAILED_MSGID]);
-        break;
+function runTestsInDirectory(file) {
+    let cancellable = null;
+    let dirEnum;
+    try {
+        dirEnum = file.enumerate_children('standard::name,standard::type',
+				          Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS,
+				          cancellable);
+    } catch (e) {
+        if (e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND))
+	    dirEnum = null;
+        else
+	    throw e;
     }
-    if (!skipped)
-	ntests += 1;
+    let info;
+    let loop = GLib.MainLoop.new(null, true);
+    let testSuccess = true;
+    while (dirEnum != null && (info = dirEnum.next_file(cancellable)) != null) {
+        let name = info.get_name();
+        if (name.indexOf('.testmeta') < 0)
+	    continue;
+        let child = dirEnum.get_child(info);
+        let childPath = child.get_path();
+
+        let kdata = GLib.KeyFile.new();
+        kdata.load_from_file(childPath, 0);
+        let execKey = kdata.get_string('Test', 'Exec');
+        if (!execKey)
+	    throw new Error("Missing Exec key in " + childPath);
+        let [success, testArgv] = GLib.shell_parse_argv(execKey);
+        print("Running test: " + childPath);
+
+        let pid;
+        [success,pid] = GLib.spawn_async(null, testArgv, null,
+					 GLib.SpawnFlags.DO_NOT_REAP_CHILD | GLib.SpawnFlags.SEARCH_PATH, null);
+        let errmsg = null;
+        let skipped = false;
+        GLib.child_watch_add(GLib.PRIORITY_DEFAULT, pid, function(pid, estatus) {
+	    try {
+	        GLib.spawn_check_exit_status(estatus);
+	    } catch (e) {
+	        if (e.domain == GLib.spawn_exit_error_quark() &&
+		    e.code == TEST_SKIP_ECODE) {
+		    print("Skipping test " + childPath);
+		    nSkippedTests++;
+		    skipped = true;
+	        } else {
+		    errmsg = e.message;
+		    testSuccess = false;
+	        }
+	    } finally {
+	        loop.quit();
+	    }
+        }, null);
+        loop.run();
+        if (!testSuccess) {
+	    GSystem.log_structured("Test " + childPath + " failed: " + errmsg,
+                                   ["MESSAGE_ID=" + TESTS_FAILED_MSGID]);
+            nFailedTests += 1;
+            break;
+        }
+        if (!skipped)
+	    ntests += 1;
+    }
 }
 
+let path = Gio.File.new_for_path('/usr/share/installed-tests');
+runTestsInDirectory(path);
+
 let rval;
-if (testSuccess) {
+if (nFailedTests == 0) {
     GSystem.log_structured("Ran " + ntests + " tests successfully, " + nSkippedTests + " skipped",
                            ["MESSAGE_ID=" + TESTS_SUCCESS_MSGID]);
     rval = 0;
