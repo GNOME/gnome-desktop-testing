@@ -93,7 +93,7 @@ function runTestsInDirectory(file) {
 
 let testDirs = ARGV.slice();
 
-if (!testDirs) {
+if (testDirs.length == 0) {
     testDirs = ['/usr/share/installed-tests'];
 }
 
