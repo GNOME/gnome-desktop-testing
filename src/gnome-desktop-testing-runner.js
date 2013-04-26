@@ -95,6 +95,11 @@ function runTestsInDirectory(file) {
 }
 
 let testDirs = ARGV.slice();
+
+if (!testDirs) {
+    testDirs = ['/usr/share/installed-tests'];
+}
+
 testDirs.forEach(function(path) {
     runTestsInDirectory(Gio.File.new_for_path(path));
 });
