@@ -43,7 +43,6 @@ function runTestsInDirectory(file) {
 	    throw e;
     }
     let info;
-    let loop = GLib.MainLoop.new(null, true);
     let testSuccess = true;
     while (dirEnum != null && (info = dirEnum.next_file(cancellable)) != null) {
         let name = info.get_name();
@@ -57,32 +56,30 @@ function runTestsInDirectory(file) {
         let execKey = kdata.get_string('Test', 'Exec');
         if (!execKey)
 	    throw new Error("Missing Exec key in " + childPath);
-        let [success, testArgv] = GLib.shell_parse_argv(execKey);
+        let [, testArgv] = GLib.shell_parse_argv(execKey);
         print("Running test: " + childPath);
 
-        let pid;
-        [success,pid] = GLib.spawn_async(null, testArgv, null,
-					 GLib.SpawnFlags.DO_NOT_REAP_CHILD | GLib.SpawnFlags.SEARCH_PATH, null);
+        let proc = GSystem.Subprocess.new_simple_argv(testArgv,
+                                                      GSystem.SubprocessStreamDisposition.INHERIT,
+                                                      GSystem.SubprocessStreamDisposition.INHERIT,
+                                                      cancellable);
+        let [, estatus] = proc.wait_sync(cancellable);
         let errmsg = null;
         let skipped = false;
-        GLib.child_watch_add(GLib.PRIORITY_DEFAULT, pid, function(pid, estatus) {
-	    try {
-	        GLib.spawn_check_exit_status(estatus);
-	    } catch (e) {
-	        if (e.domain == GLib.spawn_exit_error_quark() &&
-		    e.code == TEST_SKIP_ECODE) {
-		    print("Skipping test " + childPath);
-		    nSkippedTests++;
-		    skipped = true;
-	        } else {
-		    errmsg = e.message;
-		    testSuccess = false;
-	        }
-	    } finally {
-	        loop.quit();
+	try {
+	    GLib.spawn_check_exit_status(estatus);
+	} catch (e) {
+	    if (e.domain == GLib.spawn_exit_error_quark() &&
+		e.code == TEST_SKIP_ECODE) {
+		print("Skipping test " + childPath);
+		nSkippedTests++;
+		skipped = true;
+	    } else {
+		errmsg = e.message;
+		testSuccess = false;
 	    }
-        }, null);
-        loop.run();
+        }
+
         if (!testSuccess) {
 	    GSystem.log_structured("Test " + childPath + " failed: " + errmsg,
                                    ["MESSAGE_ID=" + TESTS_FAILED_MSGID]);
