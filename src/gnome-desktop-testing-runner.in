@@ -22,5 +22,6 @@ export GI_TYPELIB_PATH="@pkglibdir@/girepository-1.0${GI_TYPELIB_PATH:+:$GI_TYPE
 export LD_LIBRARY_PATH="@pkglibdir@/${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export PKGDATADIR=@pkgdatadir@
 export PKGLIBDIR=@pkglibdir@
+export DATADIR=@datadir@
 
 exec gjs -I "${jsdir}" "${jsdir}/gnome-desktop-testing-runner.js" "$@"

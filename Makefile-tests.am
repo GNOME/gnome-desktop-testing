@@ -17,6 +17,7 @@
 
 substitutions= \
 	-e s,@libdir\@,$(libdir), \
+	-e s,@datadir\@,$(datadir), \
 	-e s,@pkglibdir\@,$(pkglibdir), \
 	-e s,@datarootdir\@,$(datarootdir), \
 	-e s,@pkgdatadir\@,$(pkgdatadir), \

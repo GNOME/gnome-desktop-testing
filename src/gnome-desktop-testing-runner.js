@@ -94,7 +94,7 @@ function runTestsInDirectory(file) {
 let testDirs = ARGV.slice();
 
 if (testDirs.length == 0) {
-    testDirs = ['/usr/share/installed-tests'];
+    testDirs = [GLib.getenv('DATADIR') + '/installed-tests'];
 }
 
 testDirs.forEach(function(path) {
