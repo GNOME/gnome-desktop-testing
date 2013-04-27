@@ -46,7 +46,7 @@ function runTestsInDirectory(file) {
     let testSuccess = true;
     while (dirEnum != null && (info = dirEnum.next_file(cancellable)) != null) {
         let name = info.get_name();
-        if (name.indexOf('.testmeta') < 0)
+        if (name.indexOf('.test') < 0)
 	    continue;
         let child = dirEnum.get_child(info);
         let childPath = child.get_path();
@@ -92,17 +92,39 @@ function runTestsInDirectory(file) {
         if (!skipped)
 	    ntests += 1;
     }
+    return testSuccess;
 }
 
-let testDirs = ARGV.slice();
+let prefixRoot = Gio.File.new_for_path(GLib.getenv('DATADIR') + '/installed-tests');
 
-if (testDirs.length == 0) {
-    testDirs = [GLib.getenv('DATADIR') + '/installed-tests'];
+let testDirs = [];
+
+if (ARGV.length == 0) {
+    let dirEnum;
+    let info;
+    let cancellable = null;
+
+    dirEnum = prefixRoot.enumerate_children('standard::name,standard::type',
+					    Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS,
+					    cancellable);
+    while ((info = dirEnum.next_file(cancellable)) != null) {
+	let ftype = info.get_file_type();
+	if (ftype == Gio.FileType.DIRECTORY) {
+	    testDirs.push(dirEnum.get_child(info));
+	}
+    }
+    dirEnum.close(cancellable);
+} else {
+    for (let i = 0; i < ARGV.length; i++) {
+	testDirs.push(prefixRoot.get_child(ARGV[i]));
+    }
 }
 
-testDirs.forEach(function(path) {
-    runTestsInDirectory(Gio.File.new_for_path(path));
-});
+for (let i = 0; i < testDirs.length; i++) {
+    if (!runTestsInDirectory(testDirs[i])) {
+	break;
+    }
+};
 
 let rval;
 if (nFailedTests == 0) {
