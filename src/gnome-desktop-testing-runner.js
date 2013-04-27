@@ -59,10 +59,11 @@ function runTestsInDirectory(file) {
         let [, testArgv] = GLib.shell_parse_argv(execKey);
         print("Running test: " + childPath);
 
-        let proc = GSystem.Subprocess.new_simple_argv(testArgv,
-                                                      GSystem.SubprocessStreamDisposition.INHERIT,
-                                                      GSystem.SubprocessStreamDisposition.INHERIT,
-                                                      cancellable);
+	let test_tmpdir = GLib.dir_make_tmp('test-tmp-' + name + '-XXXXXX' );
+	let context = new GSystem.SubprocessContext({ argv: testArgv });
+	context.set_cwd(test_tmpdir);
+        let proc = new GSystem.Subprocess({ context: context });
+	proc.init(cancellable);
         let [, estatus] = proc.wait_sync(cancellable);
         let errmsg = null;
         let skipped = false;
@@ -79,6 +80,8 @@ function runTestsInDirectory(file) {
 		testSuccess = false;
 	    }
         }
+	
+	GSystem.shutil_rm_rf(Gio.File.new_for_path(test_tmpdir), cancellable);
 
         if (!testSuccess) {
 	    GSystem.log_structured("Test " + childPath + " failed: " + errmsg,
