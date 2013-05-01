@@ -120,11 +120,17 @@ if (ARGV.length == 0) {
     }
 }
 
-for (let i = 0; i < testDirs.length; i++) {
-    if (!runTestsInDirectory(testDirs[i])) {
-	break;
-    }
-};
+try {
+    for (let i = 0; i < testDirs.length; i++) {
+	if (!runTestsInDirectory(testDirs[i])) {
+	    break;
+	}
+    };
+} catch (e) {
+    GSystem.log_structured("Caught exception during testing: " + e,
+                           ["MESSAGE_ID=" + TESTS_FAILED_MSGID]);
+
+}
 
 let rval;
 if (nFailedTests == 0) {
