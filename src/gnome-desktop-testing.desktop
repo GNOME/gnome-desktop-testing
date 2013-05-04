@@ -1,6 +1,0 @@
-[Desktop Entry]
-Encoding=UTF-8
-Name=GNOME installed tests runner
-Exec=gnome-desktop-testing-runner
-Terminal=false
-Type=Application

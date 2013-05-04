@@ -32,6 +32,3 @@ bin_PROGRAMS += gnome-desktop-testing-runner
 
 pkgjsdir = $(pkgdatadir)/js
 pkgjs_DATA = src/gnome-desktop-testing-runner.js
-
-etcxdgautostartdir = $(sysconfdir)/xdg/autostart
-etcxdgautostart_DATA = src/gnome-desktop-testing.desktop
