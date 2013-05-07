@@ -1,4 +1,4 @@
-# Copyright (C) 2011 Colin Walters <walters@verbum.org>
+# Copyright (C) 2011,2013 Colin Walters <walters@verbum.org>
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -15,20 +15,8 @@
 # Free Software Foundation, Inc., 59 Temple Place - Suite 330,
 # Boston, MA 02111-1307, USA.
 
-substitutions= \
-	-e s,@libdir\@,$(libdir), \
-	-e s,@datadir\@,$(datadir), \
-	-e s,@pkglibdir\@,$(pkglibdir), \
-	-e s,@datarootdir\@,$(datarootdir), \
-	-e s,@pkgdatadir\@,$(pkgdatadir), \
-	$(NULL)
-
-BUILT_SOURCES += gnome-desktop-testing-runner
-
-gnome-desktop-testing-runner: src/gnome-desktop-testing-runner.in Makefile
-	sed $(substitutions) $< > $@.tmp && mv $@.tmp $@
-
 bin_PROGRAMS += gnome-desktop-testing-runner
-
-pkgjsdir = $(pkgdatadir)/js
-pkgjs_DATA = src/gnome-desktop-testing-runner.js
+gnome_desktop_testing_runner_SOURCES = src/gnome-desktop-testing-runner.c
+gnome_desktop_testing_runner_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src/libgsystem
+gnome_desktop_testing_runner_CFLAGS = $(GIO_UNIX_CFLAGS)
+gnome_desktop_testing_runner_LDADD = $(GIO_UNIX_LIBS) libgsystem.la
