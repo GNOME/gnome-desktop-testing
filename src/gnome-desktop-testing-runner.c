@@ -205,7 +205,8 @@ main (int argc, char **argv)
 
   for (iter = testdirs; iter; iter = iter->next)
     {
-      if (!run_tests_in_directory (testdirs->data, cancellable, error))
+      GFile *path = iter->data;
+      if (!run_tests_in_directory (path, cancellable, error))
 	goto out;
     }
 
