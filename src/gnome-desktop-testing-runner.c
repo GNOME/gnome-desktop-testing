@@ -118,7 +118,7 @@ run_tests_in_directory (GFile         *file,
 	    {
 	      char *keys[] = { "MESSAGE_ID=" TESTS_FAILED_MSGID, NULL };
 	      gs_free char *msg = g_strdup_printf ("Test %s failed: %s", name, tmp_error->message);
-	      gs_log_structured (msg, (const char* const*)keys);
+	      gs_log_structured_print (msg, (const char* const*)keys);
 	      failed = TRUE;
 	    }
 	  g_clear_error (&tmp_error);
@@ -213,7 +213,7 @@ main (int argc, char **argv)
     char *keys[] = { "MESSAGE_ID=" TESTS_SUCCESS_MSGID, NULL };
     gs_free char *msg = g_strdup_printf ("pass: %d skipped: %d failed: %d",
 					 ntests, n_skipped_tests, n_failed_tests);
-    gs_log_structured (msg, (const char *const*)keys);
+    gs_log_structured_print (msg, (const char *const*)keys);
   }
   
   ret = TRUE;
@@ -228,7 +228,7 @@ main (int argc, char **argv)
       g_assert (local_error);
 
       msg = g_strdup_printf ("Caught exception during testing: %s", local_error->message);
-      gs_log_structured (msg, (const char *const*)keys);
+      gs_log_structured_print (msg, (const char *const*)keys);
       g_clear_error (&local_error);
       return 1;
     }
