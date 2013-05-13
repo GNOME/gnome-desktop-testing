@@ -24,8 +24,9 @@
 #include "gsystem-local-alloc.h"
 
 #define TEST_SKIP_ECODE 77
-#define TESTS_FAILED_MSGID "0eee66bf98514369bef9868327a43cf1"
-#define TESTS_SUCCESS_MSGID "4d013788dd704743b826436c951e551d"
+#define TESTS_FAILED_MSGID     "0eee66bf98514369bef9868327a43cf1"
+#define TESTS_SUCCESS_MSGID    "4d013788dd704743b826436c951e551d"
+#define ONE_TEST_SUCCESS_MSGID "142bf5d40e9742e99d3ac8c1ace83b36"
 
 static int ntests = 0;
 static int n_skipped_tests = 0;
@@ -37,9 +38,11 @@ run_tests_in_directory (GFile         *file,
 			GError       **error)
 {
   gboolean ret = FALSE;
+  gs_free char *suite_name = NULL;
   gs_unref_object GFileEnumerator *dir_enum = NULL;
   gs_unref_object GFileInfo *info = NULL;
   GKeyFile *keyfile = NULL;
+  gs_free char *testname = NULL;
   gs_free char *exec_key = NULL;
   gs_free char *test_tmpdir = NULL;
   gs_unref_object GFile *child = NULL;
@@ -51,6 +54,8 @@ run_tests_in_directory (GFile         *file,
   int test_argc;
   char **test_argv = NULL;
   gboolean test_success = TRUE;
+
+  suite_name = g_file_get_basename (file);
   
   dir_enum = g_file_enumerate_children (file, "standard::name,standard::type",
 					G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,
@@ -68,6 +73,9 @@ run_tests_in_directory (GFile         *file,
 
       if (!g_str_has_suffix (name, ".test"))
 	continue;
+      
+      g_clear_pointer (&testname, g_free);
+      testname = g_strdup_printf ("%s/%s", suite_name, name);
 
       g_clear_object (&child);
       child = g_file_get_child (file, name);
@@ -141,6 +149,12 @@ run_tests_in_directory (GFile         *file,
 	  n_failed_tests++;
 	  break;
 	}
+      else
+	{
+	  char *keys[] = { "MESSAGE_ID=" ONE_TEST_SUCCESS_MSGID, NULL };
+	  gs_free char *msg = g_strdup_printf ("PASS: %s", testname);
+	  gs_log_structured_print (msg, (const char* const*)keys);
+	}
     }
   if (tmp_error != NULL)
     {
@@ -212,7 +226,7 @@ main (int argc, char **argv)
 
   {
     char *keys[] = { "MESSAGE_ID=" TESTS_SUCCESS_MSGID, NULL };
-    gs_free char *msg = g_strdup_printf ("pass: %d skipped: %d failed: %d",
+    gs_free char *msg = g_strdup_printf ("SUMMARY: passed: %d skipped: %d failed: %d",
 					 ntests, n_skipped_tests, n_failed_tests);
     gs_log_structured_print (msg, (const char *const*)keys);
   }
