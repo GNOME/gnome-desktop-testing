@@ -26,8 +26,9 @@
 #include <string.h>
 
 #define TEST_SKIP_ECODE 77
-#define TESTS_FAILED_MSGID     "0eee66bf98514369bef9868327a43cf1"
-#define TESTS_SUCCESS_MSGID    "4d013788dd704743b826436c951e551d"
+#define TESTS_COMPLETE_MSGID   "4d013788dd704743b826436c951e551d"
+#define ONE_TEST_FAILED_MSGID  "0eee66bf98514369bef9868327a43cf1"
+#define ONE_TEST_SKIPPED_MSGID "ca0b037012363f1898466829ea163e7d"
 #define ONE_TEST_SUCCESS_MSGID "142bf5d40e9742e99d3ac8c1ace83b36"
 
 static int ntests = 0;
@@ -116,8 +117,6 @@ run_test (GFile         *testbase,
   gboolean test_success = TRUE;
   const char *test_path;
   int estatus;
-  gboolean skipped = FALSE;
-  gboolean failed = FALSE;
 
   if (g_once_init_enter (&initialized))
     {
@@ -162,21 +161,25 @@ run_test (GFile         *testbase,
     {
       if (g_error_matches (tmp_error, G_SPAWN_EXIT_ERROR, 77))
         {
-          g_print("Skipping test %s\n", test_path);
+          char *keys[] = { "MESSAGE_ID=" ONE_TEST_SKIPPED_MSGID, NULL };
+          gs_free char *msg = g_strdup_printf ("Test %s skipped (exit code 77)", testname);
+          gs_log_structured_print (msg, (const char* const*)keys);
           n_skipped_tests++;
-          skipped = TRUE;
         }
       else
         {
-          char *keys[] = { "MESSAGE_ID=" TESTS_FAILED_MSGID, NULL };
+          char *keys[] = { "MESSAGE_ID=" ONE_TEST_FAILED_MSGID, NULL };
           gs_free char *msg = g_strdup_printf ("Test %s failed: %s", testname, tmp_error->message);
           gs_log_structured_print (msg, (const char* const*)keys);
-          failed = TRUE;
+          n_failed_tests++;
         }
       g_clear_error (&tmp_error);
     }
   else
     {
+      char *keys[] = { "MESSAGE_ID=" ONE_TEST_SUCCESS_MSGID, NULL };
+      gs_free char *msg = g_strdup_printf ("PASS: %s", testname);
+      gs_log_structured_print (msg, (const char* const*)keys);
       ntests += 1;
     }
   
@@ -184,18 +187,6 @@ run_test (GFile         *testbase,
   if (!gs_shutil_rm_rf (test_tmpdir_f, cancellable, error))
     goto out;
 
-  /* For now, just exit on the first failing test */
-  if (failed)
-    {
-      n_failed_tests++;
-    }
-  else
-    {
-      char *keys[] = { "MESSAGE_ID=" ONE_TEST_SUCCESS_MSGID, NULL };
-      gs_free char *msg = g_strdup_printf ("PASS: %s", testname);
-      gs_log_structured_print (msg, (const char* const*)keys);
-    }
-  
   ret = TRUE;
  out:
   g_clear_pointer (&keyfile, g_key_file_free);
@@ -279,27 +270,22 @@ main (int argc, char **argv)
         }
     }
 
+  ret = TRUE;
+ out:
   if (!opt_list)
     {
-      char *keys[] = { "MESSAGE_ID=" TESTS_SUCCESS_MSGID, NULL };
+      char *keys[] = { "MESSAGE_ID=" TESTS_COMPLETE_MSGID, NULL };
       gs_free char *msg = g_strdup_printf ("SUMMARY: total: %u passed: %d skipped: %d failed: %d",
                                            tests->len, ntests, n_skipped_tests, n_failed_tests);
       gs_log_structured_print (msg, (const char *const*)keys);
     }
-  
-  ret = TRUE;
- out:
   if (!ret)
     {
-      char *keys[] = { "MESSAGE_ID=" TESTS_FAILED_MSGID, NULL };
-      gs_free char *msg = NULL;
-
       g_assert (local_error);
-
-      msg = g_strdup_printf ("Caught exception during testing: %s", local_error->message);
-      gs_log_structured_print (msg, (const char *const*)keys);
+      g_printerr ("Caught exception during testing: %s", local_error->message);
       g_clear_error (&local_error);
       return 1;
     }
+  
   return 0;
 }
