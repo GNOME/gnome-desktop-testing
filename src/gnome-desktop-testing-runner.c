@@ -161,25 +161,21 @@ run_test (GFile         *testbase,
     {
       if (g_error_matches (tmp_error, G_SPAWN_EXIT_ERROR, 77))
         {
-          char *keys[] = { "MESSAGE_ID=" ONE_TEST_SKIPPED_MSGID, NULL };
-          gs_free char *msg = g_strdup_printf ("Test %s skipped (exit code 77)", testname);
-          gs_log_structured_print (msg, (const char* const*)keys);
+          gs_log_structured_print_id_v (ONE_TEST_SKIPPED_MSGID,
+                                        "Test %s skipped (exit code 77)", testname);
           n_skipped_tests++;
         }
       else
         {
-          char *keys[] = { "MESSAGE_ID=" ONE_TEST_FAILED_MSGID, NULL };
-          gs_free char *msg = g_strdup_printf ("Test %s failed: %s", testname, tmp_error->message);
-          gs_log_structured_print (msg, (const char* const*)keys);
+          gs_log_structured_print_id_v (ONE_TEST_FAILED_MSGID,
+                                        "Test %s failed: %s", testname, tmp_error->message); 
           n_failed_tests++;
         }
       g_clear_error (&tmp_error);
     }
   else
     {
-      char *keys[] = { "MESSAGE_ID=" ONE_TEST_SUCCESS_MSGID, NULL };
-      gs_free char *msg = g_strdup_printf ("PASS: %s", testname);
-      gs_log_structured_print (msg, (const char* const*)keys);
+      gs_log_structured_print_id_v (ONE_TEST_SUCCESS_MSGID, "PASS: %s", testname);
       ntests += 1;
     }
   
@@ -274,10 +270,9 @@ main (int argc, char **argv)
  out:
   if (!opt_list)
     {
-      char *keys[] = { "MESSAGE_ID=" TESTS_COMPLETE_MSGID, NULL };
-      gs_free char *msg = g_strdup_printf ("SUMMARY: total: %u passed: %d skipped: %d failed: %d",
-                                           tests->len, ntests, n_skipped_tests, n_failed_tests);
-      gs_log_structured_print (msg, (const char *const*)keys);
+      gs_log_structured_print_id_v (TESTS_COMPLETE_MSGID,
+                                    "SUMMARY: total: %u passed: %d skipped: %d failed: %d",
+                                    tests->len, ntests, n_skipped_tests, n_failed_tests);
     }
   if (!ret)
     {
