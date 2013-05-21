@@ -36,9 +36,11 @@ static int n_skipped_tests = 0;
 static int n_failed_tests = 0;
 
 static gboolean opt_list;
+static char * opt_report_directory;
 
 static GOptionEntry options[] = {
   { "list", 'l', 0, G_OPTION_ARG_NONE, &opt_list, "List matching tests", NULL },
+  { "report-directory", 0, 0, G_OPTION_ARG_FILENAME, &opt_report_directory, "Create a subdirectory per failing test in DIR", "DIR" },
   { NULL }
 };
 
@@ -115,6 +117,7 @@ run_test (GFile         *testbase,
   int test_argc;
   char **test_argv = NULL;
   gboolean test_success = TRUE;
+  gboolean failed = FALSE;
   const char *test_path;
   int estatus;
 
@@ -144,10 +147,23 @@ run_test (GFile         *testbase,
 
   test_squashed_name = g_regex_replace_literal (slash_regex, testname, -1,
                                                 0, "_", 0, NULL);
-  test_tmpname = g_strconcat ("test-tmp-", test_squashed_name, "-XXXXXX", NULL);
-  test_tmpdir = g_dir_make_tmp (test_tmpname, error);
-  if (!test_tmpdir)
-    goto out;
+  if (!opt_report_directory)
+    {
+      test_tmpname = g_strconcat ("test-tmp-", test_squashed_name, "-XXXXXX", NULL);
+      test_tmpdir = g_dir_make_tmp (test_tmpname, error);
+      if (!test_tmpdir)
+        goto out;
+      test_tmpdir_f = g_file_new_for_path (test_tmpdir);
+    }
+  else
+    {
+      test_tmpdir = g_build_filename (opt_report_directory, test_squashed_name, NULL);
+      test_tmpdir_f = g_file_new_for_path (test_tmpdir);
+      if (!gs_shutil_rm_rf (test_tmpdir_f, cancellable, error))
+        goto out;
+      if (!gs_file_ensure_directory (test_tmpdir_f, TRUE, cancellable, error))
+        goto out;
+    }
 
   proc_context = gs_subprocess_context_new (test_argv);
   gs_subprocess_context_set_cwd (proc_context, test_tmpdir);
@@ -170,6 +186,7 @@ run_test (GFile         *testbase,
           gs_log_structured_print_id_v (ONE_TEST_FAILED_MSGID,
                                         "Test %s failed: %s", testname, tmp_error->message); 
           n_failed_tests++;
+          failed = TRUE;
         }
       g_clear_error (&tmp_error);
     }
@@ -179,9 +196,12 @@ run_test (GFile         *testbase,
       ntests += 1;
     }
   
-  test_tmpdir_f = g_file_new_for_path (test_tmpdir);
-  if (!gs_shutil_rm_rf (test_tmpdir_f, cancellable, error))
-    goto out;
+  /* Keep around temporaries from failed tests */
+  if (!(failed && opt_report_directory))
+    {
+      if (!gs_shutil_rm_rf (test_tmpdir_f, cancellable, error))
+        goto out;
+    }
 
   ret = TRUE;
  out:
