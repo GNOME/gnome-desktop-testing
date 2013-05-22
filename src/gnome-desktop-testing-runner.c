@@ -31,18 +31,47 @@
 #define ONE_TEST_SKIPPED_MSGID "ca0b037012363f1898466829ea163e7d"
 #define ONE_TEST_SUCCESS_MSGID "142bf5d40e9742e99d3ac8c1ace83b36"
 
-static int ntests = 0;
-static int n_skipped_tests = 0;
-static int n_failed_tests = 0;
+typedef struct {
+  int pending_tests;
+  GError *test_error;
+
+  GCancellable *cancellable;
+  GFile *prefix_root;
+  GPtrArray *tests;
+
+  int parallel;
+  int test_index;
+  
+  int ntests;
+  int n_skipped_tests;
+  int n_failed_tests;
+
+  GMainLoop *loop;
+} TestRunnerApp;
+
+static TestRunnerApp *app;
 
 static gboolean opt_list;
+static int opt_parallel = 1;
 static char * opt_report_directory;
 
 static GOptionEntry options[] = {
   { "list", 'l', 0, G_OPTION_ARG_NONE, &opt_list, "List matching tests", NULL },
+  { "parallel", 'p', 0, G_OPTION_ARG_INT, &opt_parallel, "Specify parallelization to PROC processors; 0 will be dynamic)", "PROC" },
   { "report-directory", 0, 0, G_OPTION_ARG_FILENAME, &opt_report_directory, "Create a subdirectory per failing test in DIR", "DIR" },
   { NULL }
 };
+
+static gboolean
+run_test_async (GFile               *testbase,
+                GFile               *test,
+                GCancellable        *cancellable,
+                GAsyncReadyCallback  callback,
+                gpointer             user_data);
+static void
+on_test_run_complete (GObject      *object,
+                      GAsyncResult *result,
+                      gpointer      user_data);
 
 static gboolean
 gather_all_tests_recurse (GFile         *dir,
@@ -94,16 +123,79 @@ gather_all_tests_recurse (GFile         *dir,
   return ret;
 }
 
+static void
+on_test_exited (GObject       *obj,
+                GAsyncResult  *result,
+                gpointer       user_data)
+{
+  GError *local_error = NULL;
+  GError **error = &local_error;
+  GError *tmp_error = NULL;
+  int estatus;
+  GSSubprocess *proc = GS_SUBPROCESS (obj);
+  GTask *task = G_TASK (user_data);
+  GCancellable *cancellable = g_task_get_cancellable (task);
+  GFile *test;
+  GFile *test_tmpdir_f;
+  const char *testname;
+  gboolean failed = FALSE;
+
+  testname = g_object_get_data ((GObject*)task, "gdtr-test-name");
+  test = g_object_get_data ((GObject*)task, "gdtr-test");
+  test_tmpdir_f = g_object_get_data ((GObject*)task, "gdtr-test-tmpdir");
+
+  if (!gs_subprocess_wait_finish (proc, result, &estatus, error))
+    goto out;
+  if (!g_spawn_check_exit_status (estatus, &tmp_error))
+    {
+      if (g_error_matches (tmp_error, G_SPAWN_EXIT_ERROR, 77))
+        {
+          gs_log_structured_print_id_v (ONE_TEST_SKIPPED_MSGID,
+                                        "Test %s skipped (exit code 77)", testname);
+          app->n_skipped_tests++;
+        }
+      else
+        {
+          gs_log_structured_print_id_v (ONE_TEST_FAILED_MSGID,
+                                        "Test %s failed: %s", testname, tmp_error->message); 
+          app->n_failed_tests++;
+          failed = TRUE;
+        }
+      /* Individual test failures don't count as failure of the whole process */
+      g_clear_error (&tmp_error);
+    }
+  else
+    {
+      gs_log_structured_print_id_v (ONE_TEST_SUCCESS_MSGID, "PASS: %s", testname);
+      app->ntests += 1;
+    }
+  
+  /* Keep around temporaries from failed tests */
+  if (!(failed && opt_report_directory))
+    {
+      if (!gs_shutil_rm_rf (test_tmpdir_f, cancellable, error))
+        goto out;
+    }
+
+ out:
+  if (local_error)
+    g_task_return_error (task, local_error);
+  else
+    g_task_return_boolean (task, TRUE);
+}
+
 static gboolean
-run_test (GFile         *testbase,
-          GFile         *test,
-          GCancellable  *cancellable,
-          GError       **error)
+run_test_async (GFile               *testbase,
+                GFile               *test,
+                GCancellable        *cancellable,
+                GAsyncReadyCallback  callback,
+                gpointer             user_data)
 {
   static gsize initialized;
   static GRegex *slash_regex;
 
-  gboolean ret = FALSE;
+  GError *local_error = NULL;
+  GError **error = &local_error;
   GKeyFile *keyfile = NULL;
   gs_free char *testname = NULL;
   gs_free char *exec_key = NULL;
@@ -120,6 +212,7 @@ run_test (GFile         *testbase,
   gboolean failed = FALSE;
   const char *test_path;
   int estatus;
+  GTask *task;
 
   if (g_once_init_enter (&initialized))
     {
@@ -127,6 +220,8 @@ run_test (GFile         *testbase,
       g_assert (slash_regex != NULL);
       g_once_init_leave (&initialized, 1);
     }
+  
+  task = g_task_new (test, cancellable, callback, user_data); 
 
   testname = g_file_get_relative_path (testbase, test);
 
@@ -171,43 +266,74 @@ run_test (GFile         *testbase,
   proc = gs_subprocess_new (proc_context, cancellable, error);
   if (!proc)
     goto out;
-  if (!gs_subprocess_wait_sync (proc, &estatus, cancellable, error))
-    goto out;
-  if (!g_spawn_check_exit_status (estatus, &tmp_error))
-    {
-      if (g_error_matches (tmp_error, G_SPAWN_EXIT_ERROR, 77))
-        {
-          gs_log_structured_print_id_v (ONE_TEST_SKIPPED_MSGID,
-                                        "Test %s skipped (exit code 77)", testname);
-          n_skipped_tests++;
-        }
-      else
-        {
-          gs_log_structured_print_id_v (ONE_TEST_FAILED_MSGID,
-                                        "Test %s failed: %s", testname, tmp_error->message); 
-          n_failed_tests++;
-          failed = TRUE;
-        }
-      g_clear_error (&tmp_error);
-    }
-  else
-    {
-      gs_log_structured_print_id_v (ONE_TEST_SUCCESS_MSGID, "PASS: %s", testname);
-      ntests += 1;
-    }
-  
-  /* Keep around temporaries from failed tests */
-  if (!(failed && opt_report_directory))
-    {
-      if (!gs_shutil_rm_rf (test_tmpdir_f, cancellable, error))
-        goto out;
-    }
 
-  ret = TRUE;
+  g_object_set_data_full ((GObject*)task, "gdtr-test-name",
+                          g_strdup (testname), (GDestroyNotify)g_free);
+  g_object_set_data_full ((GObject*)task, "gdtr-test",
+                          g_object_ref (test), (GDestroyNotify)g_object_unref);
+  g_object_set_data_full ((GObject*)task, "gdtr-test-tmpdir",
+                          g_object_ref (test_tmpdir_f), (GDestroyNotify)g_object_unref);
+  
+  gs_subprocess_wait (proc, cancellable, on_test_exited, task);
+
  out:
   g_clear_pointer (&keyfile, g_key_file_free);
   g_clear_pointer (&test_argv, g_strfreev);
-  return ret;
+  if (local_error)
+    {
+      g_task_report_error (test, callback, user_data, run_test_async, local_error);
+    }
+}
+
+static gboolean
+run_test_async_finish (GFile         *test,
+                       GAsyncResult  *result,
+                       GError       **error)
+{
+  g_return_val_if_fail (g_task_is_valid (result, test), FALSE);
+  return g_task_propagate_boolean (G_TASK (result), error);
+}
+
+static void
+reschedule_tests (GCancellable *cancellable)
+{
+  while (app->pending_tests < app->parallel
+         && app->test_index < app->tests->len)
+    {
+      GFile *test = app->tests->pdata[app->test_index];
+      run_test_async (app->prefix_root, test, cancellable,
+                      on_test_run_complete, NULL);
+      app->pending_tests++;
+      app->test_index++;
+    }
+  if (app->pending_tests == 0)
+    g_main_loop_quit (app->loop);
+}
+
+static void
+on_test_run_complete (GObject      *object,
+                      GAsyncResult *result,
+                      gpointer      user_data)
+{
+  GError *local_error = NULL;
+  GError **error = &local_error;
+
+  if (!run_test_async_finish ((GFile*)object, result, error))
+    goto out;
+
+ out:
+  if (local_error)
+    {
+      if (!app->test_error)
+        app->test_error = g_error_copy (local_error);
+      g_clear_error (&local_error);
+      g_main_loop_quit (app->loop);
+    }
+  else
+    {
+      app->pending_tests--;
+      reschedule_tests (app->cancellable);
+    }
 }
 
 static gint
@@ -227,10 +353,13 @@ main (int argc, char **argv)
   GCancellable *cancellable = NULL;
   GError *local_error = NULL;
   GError **error = &local_error;
+  guint total_tests;
   int i, j;
-  gs_unref_object GFile *prefix_root = NULL;
-  gs_unref_ptrarray GPtrArray *tests = NULL;
   GOptionContext *context;
+  TestRunnerApp appstruct;
+
+  memset (&appstruct, 0, sizeof (appstruct));
+  app = &appstruct;
 
   context = g_option_context_new ("[PREFIX...] - Run installed tests");
   g_option_context_add_main_entries (context, options, NULL);
@@ -238,23 +367,31 @@ main (int argc, char **argv)
   if (!g_option_context_parse (context, &argc, &argv, error))
     goto out;
 
-  prefix_root = g_file_new_for_path (DATADIR "/installed-tests");
+  if (opt_parallel == 0)
+    app->parallel = g_get_num_processors ();
+  else
+    app->parallel = opt_parallel;
 
-  tests = g_ptr_array_new_with_free_func (g_object_unref);
+  app->loop = g_main_loop_new (NULL, TRUE);
 
-  if (!gather_all_tests_recurse (prefix_root, "", tests,
+  app->prefix_root = g_file_new_for_path (DATADIR "/installed-tests");
+
+  app->tests = g_ptr_array_new_with_free_func (g_object_unref);
+
+  if (!gather_all_tests_recurse (app->prefix_root, "", app->tests,
                                  cancellable, error))
     goto out;
 
-  g_ptr_array_sort (tests, cmp_tests);
+  g_ptr_array_sort (app->tests, cmp_tests);
 
   if (argc > 1)
     {
-      for (j = 0; j < tests->len; j++)
+      j = 0;
+      while (j < app->tests->len)
         {
           gboolean matches = FALSE;
-          GFile *test = tests->pdata[j];
-          gs_free char *test_relname = g_file_get_relative_path (prefix_root, test);
+          GFile *test = app->tests->pdata[j];
+          gs_free char *test_relname = g_file_get_relative_path (app->prefix_root, test);
           for (i = 1; i < argc; i++)
             {
               const char *prefix = argv[i];
@@ -264,35 +401,42 @@ main (int argc, char **argv)
                   break;
                 }
             }
-          if (matches)
-            {
-              if (opt_list)
-                g_print ("%s\n", test_relname);
-              else if (!run_test (prefix_root, test, cancellable, error))
-                goto out;
-            }
+          if (!matches)
+            g_ptr_array_remove_index_fast (app->tests, j);
+          else
+            j++;
+        }
+    }
+
+  total_tests = app->tests->len;
+
+  if (opt_list)
+    {
+      for (i = 0; i < app->tests->len; i++)
+        {
+          GFile *test = app->tests->pdata[i];
+          gs_free char *test_relname = g_file_get_relative_path (app->prefix_root, test);
+          g_print ("%s\n", test_relname);
         }
     }
   else
     {
-      for (i = 0; i < tests->len; i++)
-        {
-          GFile *test = tests->pdata[i];
-          gs_free char *test_relname = g_file_get_relative_path (prefix_root, test);
-          if (opt_list)
-            g_print ("%s\n", test_relname);
-          else if (!run_test (prefix_root, test, cancellable, error))
-            goto out;
-        }
+      reschedule_tests (app->cancellable);
     }
+
+  g_main_loop_run (app->loop);
+  if (app->test_error)
+    g_propagate_error (error, app->test_error);
 
   ret = TRUE;
  out:
+  g_clear_pointer (&app->tests, g_ptr_array_unref);
+  g_clear_object (&app->prefix_root);
   if (!opt_list)
     {
       gs_log_structured_print_id_v (TESTS_COMPLETE_MSGID,
                                     "SUMMARY: total: %u passed: %d skipped: %d failed: %d",
-                                    tests->len, ntests, n_skipped_tests, n_failed_tests);
+                                    total_tests, app->ntests, app->n_skipped_tests, app->n_failed_tests);
     }
   if (!ret)
     {
