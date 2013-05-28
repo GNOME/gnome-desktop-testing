@@ -46,6 +46,30 @@ typedef struct {
   int n_failed_tests;
 } TestRunnerApp;
 
+typedef struct {
+  volatile gint refcount;
+  GFile *prefix_root;
+  GFile *path;
+} Test;
+
+static void
+test_unref (Test *test)
+{
+  if (!g_atomic_int_dec_and_test (&test->refcount))
+    return;
+  g_object_unref (test->prefix_root);
+  g_object_unref (test->path);
+}
+
+static Test *
+test_new (GFile *prefix_root, GFile *path)
+{
+  Test *test = g_new0 (Test, 1);
+  test->prefix_root = g_object_ref (prefix_root);
+  test->path = g_object_ref (path);
+  return test;
+}
+
 static TestRunnerApp *app;
 
 static gboolean opt_list;
@@ -62,8 +86,7 @@ static GOptionEntry options[] = {
 };
 
 static gboolean
-run_test_async (GFile               *testbase,
-                GFile               *test,
+run_test_async (Test                *test,
                 GCancellable        *cancellable,
                 GAsyncReadyCallback  callback,
                 gpointer             user_data);
@@ -102,8 +125,7 @@ gather_all_tests_recurse (GFile         *prefix_root,
 
       if (type == G_FILE_TYPE_REGULAR && g_str_has_suffix (name, ".test"))
         {
-          g_object_set_data ((GObject*)child, "gdtr-prefix", g_object_ref (prefix_root));
-          g_ptr_array_add (tests, g_object_ref (child));
+          g_ptr_array_add (tests, test_new (prefix_root, child));
         }
       else if (type == G_FILE_TYPE_DIRECTORY)
         {
@@ -136,13 +158,13 @@ on_test_exited (GObject       *obj,
   GSSubprocess *proc = GS_SUBPROCESS (obj);
   GTask *task = G_TASK (user_data);
   GCancellable *cancellable = g_task_get_cancellable (task);
-  GFile *test;
+  GFile *test_path;
   GFile *test_tmpdir_f;
   const char *testname;
   gboolean failed = FALSE;
 
   testname = g_object_get_data ((GObject*)task, "gdtr-test-name");
-  test = g_object_get_data ((GObject*)task, "gdtr-test");
+  test_path = g_object_get_data ((GObject*)task, "gdtr-test");
   test_tmpdir_f = g_object_get_data ((GObject*)task, "gdtr-test-tmpdir");
 
   if (!gs_subprocess_wait_finish (proc, result, &estatus, error))
@@ -186,8 +208,7 @@ on_test_exited (GObject       *obj,
 }
 
 static gboolean
-run_test_async (GFile               *testbase,
-                GFile               *test,
+run_test_async (Test                *test,
                 GCancellable        *cancellable,
                 GAsyncReadyCallback  callback,
                 gpointer             user_data)
@@ -222,11 +243,10 @@ run_test_async (GFile               *testbase,
       g_once_init_leave (&initialized, 1);
     }
   
-  task = g_task_new (test, cancellable, callback, user_data); 
+  task = g_task_new (test->path, cancellable, callback, user_data); 
 
-  testname = g_file_get_relative_path (testbase, test);
-
-  test_path = gs_file_get_path_cached (test);
+  testname = g_file_get_relative_path (test->prefix_root, test->path);
+  test_path = gs_file_get_path_cached (test->path);
 
   keyfile = g_key_file_new ();
   if (!g_key_file_load_from_file (keyfile, test_path, 0, error))
@@ -271,7 +291,7 @@ run_test_async (GFile               *testbase,
   g_object_set_data_full ((GObject*)task, "gdtr-test-name",
                           g_strdup (testname), (GDestroyNotify)g_free);
   g_object_set_data_full ((GObject*)task, "gdtr-test",
-                          g_object_ref (test), (GDestroyNotify)g_object_unref);
+                          g_object_ref (test->path), (GDestroyNotify)g_object_unref);
   g_object_set_data_full ((GObject*)task, "gdtr-test-tmpdir",
                           g_object_ref (test_tmpdir_f), (GDestroyNotify)g_object_unref);
   
@@ -282,7 +302,7 @@ run_test_async (GFile               *testbase,
   g_clear_pointer (&test_argv, g_strfreev);
   if (local_error)
     {
-      g_task_report_error (test, callback, user_data, run_test_async, local_error);
+      g_task_report_error (test->path, callback, user_data, run_test_async, local_error);
     }
 }
 
@@ -301,9 +321,8 @@ reschedule_tests (GCancellable *cancellable)
   while (app->pending_tests < app->parallel
          && app->test_index < app->tests->len)
     {
-      GFile *test = app->tests->pdata[app->test_index];
-      GFile *prefix_root = g_object_get_data ((GObject*)test, "gdtr-prefix");
-      run_test_async (prefix_root, test, cancellable,
+      Test *test = app->tests->pdata[app->test_index];
+      run_test_async (test, cancellable,
                       on_test_run_complete, NULL);
       app->pending_tests++;
       app->test_index++;
@@ -336,11 +355,15 @@ on_test_run_complete (GObject      *object,
 }
 
 static gint
-cmp_tests (gconstpointer a,
-           gconstpointer b)
+cmp_tests (gconstpointer adata,
+           gconstpointer bdata)
 {
-  const char *apath = gs_file_get_path_cached (*((GFile**)a));
-  const char *bpath = gs_file_get_path_cached (*((GFile**)b));
+  Test **a_pp = (gpointer)adata;
+  Test **b_pp = (gpointer)bdata;
+  Test *a = *a_pp;
+  Test *b = *b_pp;
+  const char *apath = gs_file_get_path_cached (a->path);
+  const char *bpath = gs_file_get_path_cached (b->path);
 
   return strcmp (apath, bpath);
 }
@@ -356,6 +379,7 @@ main (int argc, char **argv)
   int i, j;
   GOptionContext *context;
   TestRunnerApp appstruct;
+  GPtrArray *test_paths;
   const char *const *datadirs_iter;
 
   memset (&appstruct, 0, sizeof (appstruct));
@@ -372,7 +396,7 @@ main (int argc, char **argv)
   else
     app->parallel = opt_parallel;
 
-  app->tests = g_ptr_array_new_with_free_func (g_object_unref);
+  app->tests = g_ptr_array_new_with_free_func ((GDestroyNotify)test_unref);
 
   if (opt_dirs)
     datadirs_iter = (const char *const*) opt_dirs;
@@ -401,9 +425,8 @@ main (int argc, char **argv)
       while (j < app->tests->len)
         {
           gboolean matches = FALSE;
-          GFile *test = app->tests->pdata[j];
-          GFile *prefix_root = g_object_get_data ((GObject*)test, "gdtr-prefix");
-          gs_free char *test_relname = g_file_get_relative_path (prefix_root, test);
+          Test *test = app->tests->pdata[j];
+          gs_free char *test_relname = g_file_get_relative_path (test->prefix_root, test->path);
           for (i = 1; i < argc; i++)
             {
               const char *prefix = argv[i];
@@ -426,11 +449,10 @@ main (int argc, char **argv)
     {
       for (i = 0; i < app->tests->len; i++)
         {
-          GFile *test = app->tests->pdata[i];
-          const char *path = gs_file_get_path_cached (test);
-          GFile *prefix_root = g_object_get_data ((GObject*)test, "gdtr-prefix");
-          gs_free char *test_relname = g_file_get_relative_path (prefix_root, test);
-          g_print ("%s (%s)\n", test_relname, gs_file_get_path_cached (prefix_root));
+          Test *test = app->tests->pdata[i];
+          const char *path = gs_file_get_path_cached (test->path);
+          gs_free char *test_relname = g_file_get_relative_path (test->prefix_root, test->path);
+          g_print ("%s (%s)\n", test_relname, gs_file_get_path_cached (test->prefix_root));
         }
     }
   else
