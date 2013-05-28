@@ -44,8 +44,6 @@ typedef struct {
   int ntests;
   int n_skipped_tests;
   int n_failed_tests;
-
-  GMainLoop *loop;
 } TestRunnerApp;
 
 static TestRunnerApp *app;
@@ -310,8 +308,6 @@ reschedule_tests (GCancellable *cancellable)
       app->pending_tests++;
       app->test_index++;
     }
-  if (app->pending_tests == 0)
-    g_main_loop_quit (app->loop);
 }
 
 static void
@@ -331,7 +327,6 @@ on_test_run_complete (GObject      *object,
       if (!app->test_error)
         app->test_error = g_error_copy (local_error);
       g_clear_error (&local_error);
-      g_main_loop_quit (app->loop);
     }
   else
     {
@@ -376,8 +371,6 @@ main (int argc, char **argv)
     app->parallel = g_get_num_processors ();
   else
     app->parallel = opt_parallel;
-
-  app->loop = g_main_loop_new (NULL, TRUE);
 
   app->tests = g_ptr_array_new_with_free_func (g_object_unref);
 
@@ -443,7 +436,10 @@ main (int argc, char **argv)
   else
     {
       reschedule_tests (app->cancellable);
-      g_main_loop_run (app->loop);
+
+      while (app->pending_tests && !app->test_error)
+        g_main_context_iteration (NULL, TRUE);
+
       if (app->test_error)
         g_propagate_error (error, app->test_error);
     }
