@@ -41,7 +41,7 @@ libgsystem_libs = $(GIO_UNIX_LIBS) $(SYSTEMD_JOURNAL_LIBS)
 include src/libgsystem/Makefile-libgsystem.am
 privlib_LTLIBRARIES += libgsystem.la
 
-include Makefile-tests.am
+include Makefile-runner.am
 
 install-data-hook: $(INSTALL_DATA_HOOKS)
 
