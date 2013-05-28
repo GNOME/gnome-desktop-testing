@@ -422,11 +422,10 @@ main (int argc, char **argv)
   else
     {
       reschedule_tests (app->cancellable);
+      g_main_loop_run (app->loop);
+      if (app->test_error)
+        g_propagate_error (error, app->test_error);
     }
-
-  g_main_loop_run (app->loop);
-  if (app->test_error)
-    g_propagate_error (error, app->test_error);
 
   ret = TRUE;
  out:
