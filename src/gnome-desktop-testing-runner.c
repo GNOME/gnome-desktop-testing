@@ -36,7 +36,6 @@ typedef struct {
   GError *test_error;
 
   GCancellable *cancellable;
-  GFile *prefix_root;
   GPtrArray *tests;
 
   int parallel;
@@ -54,8 +53,10 @@ static TestRunnerApp *app;
 static gboolean opt_list;
 static int opt_parallel = 1;
 static char * opt_report_directory;
+static char **opt_dirs;
 
 static GOptionEntry options[] = {
+  { "dir", 'd', 0, G_OPTION_ARG_STRING_ARRAY, &opt_dirs, "Only run tests from these dirs (default: all system data dirs)", NULL },
   { "list", 'l', 0, G_OPTION_ARG_NONE, &opt_list, "List matching tests", NULL },
   { "parallel", 'p', 0, G_OPTION_ARG_INT, &opt_parallel, "Specify parallelization to PROC processors; 0 will be dynamic)", "PROC" },
   { "report-directory", 0, 0, G_OPTION_ARG_FILENAME, &opt_report_directory, "Create a subdirectory per failing test in DIR", "DIR" },
@@ -74,7 +75,8 @@ on_test_run_complete (GObject      *object,
                       gpointer      user_data);
 
 static gboolean
-gather_all_tests_recurse (GFile         *dir,
+gather_all_tests_recurse (GFile         *prefix_root,
+                          GFile         *dir,
                           const char    *prefix,
                           GPtrArray     *tests,
                           GCancellable  *cancellable,
@@ -102,11 +104,12 @@ gather_all_tests_recurse (GFile         *dir,
 
       if (type == G_FILE_TYPE_REGULAR && g_str_has_suffix (name, ".test"))
         {
+          g_object_set_data ((GObject*)child, "gdtr-prefix", g_object_ref (prefix_root));
           g_ptr_array_add (tests, g_object_ref (child));
         }
       else if (type == G_FILE_TYPE_DIRECTORY)
         {
-          if (!gather_all_tests_recurse (child, suite_prefix, tests,
+          if (!gather_all_tests_recurse (prefix_root, child, suite_prefix, tests,
                                          cancellable, error))
             goto out;
         }
@@ -301,7 +304,8 @@ reschedule_tests (GCancellable *cancellable)
          && app->test_index < app->tests->len)
     {
       GFile *test = app->tests->pdata[app->test_index];
-      run_test_async (app->prefix_root, test, cancellable,
+      GFile *prefix_root = g_object_get_data ((GObject*)test, "gdtr-prefix");
+      run_test_async (prefix_root, test, cancellable,
                       on_test_run_complete, NULL);
       app->pending_tests++;
       app->test_index++;
@@ -357,6 +361,7 @@ main (int argc, char **argv)
   int i, j;
   GOptionContext *context;
   TestRunnerApp appstruct;
+  const char *const *datadirs_iter;
 
   memset (&appstruct, 0, sizeof (appstruct));
   app = &appstruct;
@@ -374,13 +379,26 @@ main (int argc, char **argv)
 
   app->loop = g_main_loop_new (NULL, TRUE);
 
-  app->prefix_root = g_file_new_for_path (DATADIR "/installed-tests");
-
   app->tests = g_ptr_array_new_with_free_func (g_object_unref);
 
-  if (!gather_all_tests_recurse (app->prefix_root, "", app->tests,
-                                 cancellable, error))
-    goto out;
+  if (opt_dirs)
+    datadirs_iter = (const char *const*) opt_dirs;
+  else
+    datadirs_iter = g_get_system_data_dirs ();
+  
+  for (; *datadirs_iter; datadirs_iter++)
+    {
+      const char *datadir = *datadirs_iter;
+      gs_unref_object GFile *datadir_f = g_file_new_for_path (datadir);
+      gs_unref_object GFile *prefix_root = g_file_get_child (datadir_f, "installed-tests");
+      
+      if (!g_file_query_exists (prefix_root, NULL))
+        continue;
+
+      if (!gather_all_tests_recurse (prefix_root, prefix_root, "", app->tests,
+                                     cancellable, error))
+        goto out;
+    }
 
   g_ptr_array_sort (app->tests, cmp_tests);
 
@@ -391,7 +409,8 @@ main (int argc, char **argv)
         {
           gboolean matches = FALSE;
           GFile *test = app->tests->pdata[j];
-          gs_free char *test_relname = g_file_get_relative_path (app->prefix_root, test);
+          GFile *prefix_root = g_object_get_data ((GObject*)test, "gdtr-prefix");
+          gs_free char *test_relname = g_file_get_relative_path (prefix_root, test);
           for (i = 1; i < argc; i++)
             {
               const char *prefix = argv[i];
@@ -415,8 +434,10 @@ main (int argc, char **argv)
       for (i = 0; i < app->tests->len; i++)
         {
           GFile *test = app->tests->pdata[i];
-          gs_free char *test_relname = g_file_get_relative_path (app->prefix_root, test);
-          g_print ("%s\n", test_relname);
+          const char *path = gs_file_get_path_cached (test);
+          GFile *prefix_root = g_object_get_data ((GObject*)test, "gdtr-prefix");
+          gs_free char *test_relname = g_file_get_relative_path (prefix_root, test);
+          g_print ("%s (%s)\n", test_relname, gs_file_get_path_cached (prefix_root));
         }
     }
   else
@@ -430,7 +451,6 @@ main (int argc, char **argv)
   ret = TRUE;
  out:
   g_clear_pointer (&app->tests, g_ptr_array_unref);
-  g_clear_object (&app->prefix_root);
   if (!opt_list)
     {
       gs_log_structured_print_id_v (TESTS_COMPLETE_MSGID,
