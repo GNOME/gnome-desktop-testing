@@ -51,6 +51,11 @@ typedef enum {
   TEST_STATE_COMPLETE_FAILED,
 } TestState;
 
+typedef enum {
+  TEST_TYPE_UNKNOWN,
+  TEST_TYPE_SESSION
+} TestType;
+
 typedef struct {
   volatile gint refcount;
   GFile *prefix_root;
@@ -61,6 +66,7 @@ typedef struct {
   char **argv;
 
   TestState state;
+  TestType type;
 } Test;
 
 static void
@@ -93,6 +99,7 @@ load_test (GFile         *prefix_root,
   Test *test = g_new0 (Test, 1);
   int test_argc;
   gs_free char *exec_key = NULL;
+  gs_free char *type_key = NULL;
   const char *test_path;
 
   g_assert (test->state == TEST_STATE_UNLOADED);
@@ -114,11 +121,26 @@ load_test (GFile         *prefix_root,
 
   if (!g_shell_parse_argv (exec_key, &test_argc, &test->argv, error))
     goto out;
+
+  type_key = g_key_file_get_string (keyfile, "Test", "Type", error);
+  if (type_key == NULL)
+    goto out;
+  if (strcmp (type_key, "session") == 0)
+    {
+      test->type = TEST_TYPE_SESSION;
+    }
+  else
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                   "Unknown test type '%s'", test->type);
+      goto out;
+    }
   
   test->state = TEST_STATE_LOADED;
 
   ret = TRUE;
  out:
+  g_prefix_error (error, "Test '%s': ", test->name);
   g_clear_pointer (&keyfile, g_key_file_free);
   if (!ret)
     test_unref (test);
@@ -278,7 +300,6 @@ run_test_async (Test                *test,
   GError *local_error = NULL;
   GError **error = &local_error;
   gs_free char *testname = NULL;
-  gs_free char *exec_key = NULL;
   gs_free char *test_tmpdir = NULL;
   gs_unref_object GFile *test_tmpdir_f = NULL;
   gs_free char *test_squashed_name = NULL;
@@ -417,7 +438,7 @@ main (int argc, char **argv)
   GCancellable *cancellable = NULL;
   GError *local_error = NULL;
   GError **error = &local_error;
-  guint total_tests;
+  guint total_tests = 0;
   int i, j;
   GOptionContext *context;
   TestRunnerApp appstruct;
@@ -526,7 +547,7 @@ main (int argc, char **argv)
               n_failed++;
               break;
             default:
-              g_assert_not_reached ();
+              break;
             }
         }
       gs_log_structured_print_id_v (TESTS_COMPLETE_MSGID,
@@ -537,7 +558,7 @@ main (int argc, char **argv)
   if (!ret)
     {
       g_assert (local_error);
-      g_printerr ("Caught exception during testing: %s", local_error->message);
+      g_printerr ("Caught exception during testing: %s\n", local_error->message);
       g_clear_error (&local_error);
       return 1;
     }
