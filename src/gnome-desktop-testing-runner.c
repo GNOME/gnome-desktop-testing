@@ -1,6 +1,6 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*-
  *
- * Copyright (C) 2011 Colin Walters <walters@verbum.org>
+ * Copyright (C) 2011,2013 Colin Walters <walters@verbum.org>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -40,6 +40,8 @@ typedef struct {
 
   int parallel;
   int test_index;
+
+  gboolean running_exclusive_test;
 } TestRunnerApp;
 
 typedef enum {
@@ -53,7 +55,8 @@ typedef enum {
 
 typedef enum {
   TEST_TYPE_UNKNOWN,
-  TEST_TYPE_SESSION
+  TEST_TYPE_SESSION,
+  TEST_TYPE_SESSION_EXCLUSIVE
 } TestType;
 
 typedef struct _Test
@@ -146,6 +149,8 @@ load_test (GFile         *prefix_root,
     goto out;
   if (strcmp (type_key, "session") == 0)
     test->type = TEST_TYPE_SESSION;
+  else if (strcmp (type_key, "session-exclusive") == 0)
+    test->type = TEST_TYPE_SESSION_EXCLUSIVE;
   else
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
@@ -383,7 +388,7 @@ run_test_async (Test                *test,
 }
 
 static gboolean
-run_test_async_finish (GFile         *test,
+run_test_async_finish (Test          *test,
                        GAsyncResult  *result,
                        GError       **error)
 {
@@ -394,10 +399,13 @@ run_test_async_finish (GFile         *test,
 static void
 reschedule_tests (GCancellable *cancellable)
 {
-  while (app->pending_tests < app->parallel
+  while (!app->running_exclusive_test
+         && app->pending_tests < app->parallel
          && app->test_index < app->tests->len)
     {
       Test *test = app->tests->pdata[app->test_index];
+      if (test->type == TEST_TYPE_SESSION_EXCLUSIVE)
+        app->running_exclusive_test = TRUE;
       run_test_async (test, cancellable,
                       on_test_run_complete, NULL);
       app->pending_tests++;
@@ -412,8 +420,9 @@ on_test_run_complete (GObject      *object,
 {
   GError *local_error = NULL;
   GError **error = &local_error;
+  Test *test = (Test*)object;
 
-  if (!run_test_async_finish ((GFile*)object, result, error))
+  if (!run_test_async_finish (test, result, error))
     goto out;
 
  out:
@@ -426,6 +435,8 @@ on_test_run_complete (GObject      *object,
   else
     {
       app->pending_tests--;
+      if (test->type == TEST_TYPE_SESSION_EXCLUSIVE)
+        app->running_exclusive_test = FALSE;
       reschedule_tests (app->cancellable);
     }
 }
