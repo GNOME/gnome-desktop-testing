@@ -56,8 +56,10 @@ typedef enum {
   TEST_TYPE_SESSION
 } TestType;
 
-typedef struct {
-  volatile gint refcount;
+typedef struct _Test
+{
+  GObject parent_instance;
+
   GFile *prefix_root;
   GFile *path;
   GFile *tmpdir;
@@ -69,22 +71,37 @@ typedef struct {
   TestType type;
 } Test;
 
-static void
-test_unref (Test *test)
+typedef struct _TestClass
 {
-  if (!g_atomic_int_dec_and_test (&test->refcount))
-    return;
-  g_strfreev (test->argv);
-  g_clear_object (&test->tmpdir);
-  g_object_unref (test->prefix_root);
-  g_object_unref (test->path);
+  GObjectClass parent_class;
+} TestClass;
+
+static GType test_get_type (void);
+G_DEFINE_TYPE (Test, test, G_TYPE_OBJECT);
+
+static void
+test_finalize (GObject *gobject)
+{
+  Test *self = (Test*) gobject;
+  g_strfreev (self->argv);
+  g_clear_object (&self->tmpdir);
+  g_object_unref (self->prefix_root);
+  g_object_unref (self->path);
+
+  G_OBJECT_CLASS (test_parent_class)->finalize (gobject);
 }
 
-static Test*
-test_ref (Test *test)
+static void
+test_class_init (TestClass *klass)
 {
-  g_atomic_int_inc (&test->refcount);
-  return test;
+  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+  
+  gobject_class->finalize = test_finalize;
+}
+
+static void
+test_init (Test *self)
+{
 }
 
 static gboolean
@@ -96,11 +113,13 @@ load_test (GFile         *prefix_root,
 {
   gboolean ret = FALSE;
   GKeyFile *keyfile = NULL;
-  Test *test = g_new0 (Test, 1);
+  gs_unref_object Test *test = NULL;
   int test_argc;
   gs_free char *exec_key = NULL;
   gs_free char *type_key = NULL;
   const char *test_path;
+
+  test = g_object_new (test_get_type (), NULL);
 
   g_assert (test->state == TEST_STATE_UNLOADED);
 
@@ -126,9 +145,7 @@ load_test (GFile         *prefix_root,
   if (type_key == NULL)
     goto out;
   if (strcmp (type_key, "session") == 0)
-    {
-      test->type = TEST_TYPE_SESSION;
-    }
+    test->type = TEST_TYPE_SESSION;
   else
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
@@ -139,13 +156,12 @@ load_test (GFile         *prefix_root,
   test->state = TEST_STATE_LOADED;
 
   ret = TRUE;
+  *out_test = test;
+  test = NULL;
  out:
-  g_prefix_error (error, "Test '%s': ", test->name);
+  if (!ret && test)
+    g_prefix_error (error, "Test '%s': ", test->name);
   g_clear_pointer (&keyfile, g_key_file_free);
-  if (!ret)
-    test_unref (test);
-  else
-    *out_test = test;
   return ret;
 }
 
@@ -244,7 +260,7 @@ on_test_exited (GObject       *obj,
   GFile *test_tmpdir_f;
   gboolean failed = FALSE;
 
-  test = g_object_get_data ((GObject*)task, "gdtr-test");
+  test = g_task_get_source_object (task);
 
   g_assert (test->state == TEST_STATE_EXECUTING);
 
@@ -324,7 +340,7 @@ run_test_async (Test                *test,
       g_once_init_leave (&initialized, 1);
     }
   
-  task = g_task_new (test->path, cancellable, callback, user_data); 
+  task = g_task_new (test, cancellable, callback, user_data); 
 
   g_print ("Running test: %s\n", test->name);
 
@@ -357,9 +373,6 @@ run_test_async (Test                *test,
 
   test->state = TEST_STATE_EXECUTING;
 
-  g_object_set_data_full ((GObject*)task, "gdtr-test",
-                          test_ref (test), (GDestroyNotify)test_unref);
-  
   gs_subprocess_wait (proc, cancellable, on_test_exited, task);
 
  out:
@@ -428,7 +441,12 @@ cmp_tests (gconstpointer adata,
   const char *apath = gs_file_get_path_cached (a->path);
   const char *bpath = gs_file_get_path_cached (b->path);
 
-  return strcmp (apath, bpath);
+  if (a->type == b->type)
+    return strcmp (apath, bpath);
+  else if (a->type < b->type)
+    return -1;
+  else
+    return 1;
 }
 
 int
@@ -460,7 +478,7 @@ main (int argc, char **argv)
   else
     app->parallel = opt_parallel;
 
-  app->tests = g_ptr_array_new_with_free_func ((GDestroyNotify)test_unref);
+  app->tests = g_ptr_array_new_with_free_func ((GDestroyNotify)g_object_unref);
 
   if (opt_dirs)
     datadirs_iter = (const char *const*) opt_dirs;
