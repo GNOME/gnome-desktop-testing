@@ -42,6 +42,7 @@ include src/libgsystem/Makefile-libgsystem.am
 privlib_LTLIBRARIES += libgsystem.la
 
 include Makefile-runner.am
+include Makefile-functional-tests.am
 
 install-data-hook: $(INSTALL_DATA_HOOKS)
 
