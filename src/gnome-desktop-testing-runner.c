@@ -132,7 +132,7 @@ load_test (GFile         *prefix_root,
   else
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                   "Unknown test type '%s'", test->type);
+                   "Unknown test type '%s'", type_key);
       goto out;
     }
   
@@ -529,6 +529,14 @@ main (int argc, char **argv)
 
   ret = TRUE;
  out:
+  if (!ret)
+    {
+      g_assert (local_error);
+      /* Reusing ONE_TEST_FAILED_MSGID is not quite right, but whatever */
+      gs_log_structured_print_id_v (ONE_TEST_FAILED_MSGID,
+                                    "Caught exception during testing: %s", local_error->message); 
+      g_clear_error (&local_error);
+    }
   if (!opt_list)
     {
       n_passed = n_skipped = n_failed = 0;
@@ -551,17 +559,12 @@ main (int argc, char **argv)
             }
         }
       gs_log_structured_print_id_v (TESTS_COMPLETE_MSGID,
-                                    "SUMMARY: total: %u passed: %d skipped: %d failed: %d",
+                                    "SUMMARY%s: total: %u passed: %d skipped: %d failed: %d",
+                                    ret ? "" : " (incomplete)",
                                     total_tests, n_passed, n_skipped, n_failed);
     }
   g_clear_pointer (&app->tests, g_ptr_array_unref);
   if (!ret)
-    {
-      g_assert (local_error);
-      g_printerr ("Caught exception during testing: %s\n", local_error->message);
-      g_clear_error (&local_error);
-      return 1;
-    }
-  
+    return 1;
   return 0;
 }
