@@ -283,7 +283,7 @@ on_test_exited (GObject       *obj,
         {
           test->state = TEST_STATE_COMPLETE_FAILED;
           gs_log_structured_print_id_v (ONE_TEST_FAILED_MSGID,
-                                        "Test %s failed: %s", test->name, tmp_error->message); 
+                                        "FAILED: %s: %s", test->name, tmp_error->message); 
           failed = TRUE;
         }
       /* Individual test failures don't count as failure of the whole process */
