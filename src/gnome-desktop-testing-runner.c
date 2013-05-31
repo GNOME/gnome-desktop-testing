@@ -404,8 +404,16 @@ reschedule_tests (GCancellable *cancellable)
          && app->test_index < app->tests->len)
     {
       Test *test = app->tests->pdata[app->test_index];
+      g_assert (test->type != TEST_TYPE_UNKNOWN);
       if (test->type == TEST_TYPE_SESSION_EXCLUSIVE)
-        app->running_exclusive_test = TRUE;
+        {
+          /* If our next text is exclusive, wait until any other
+           * pending async tests have run.
+           */
+          if (app->pending_tests > 0)
+            break;
+          app->running_exclusive_test = TRUE;
+        }
       run_test_async (test, cancellable,
                       on_test_run_complete, NULL);
       app->pending_tests++;
