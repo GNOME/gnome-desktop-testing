@@ -449,15 +449,21 @@ cmp_tests (gconstpointer adata,
   Test **b_pp = (gpointer)bdata;
   Test *a = *a_pp;
   Test *b = *b_pp;
-  const char *apath = gs_file_get_path_cached (a->path);
-  const char *bpath = gs_file_get_path_cached (b->path);
 
   if (a->type == b->type)
-    return strcmp (apath, bpath);
+    {
+      const char *apath = gs_file_get_path_cached (a->path);
+      const char *bpath = gs_file_get_path_cached (b->path);
+      return strcmp (apath, bpath);
+    }
   else if (a->type < b->type)
-    return -1;
+    {
+      return -1;
+    }
   else
-    return 1;
+    {
+      return 1;
+    }
 }
 
 int
@@ -510,8 +516,6 @@ main (int argc, char **argv)
         goto out;
     }
 
-  g_ptr_array_sort (app->tests, cmp_tests);
-
   if (argc > 1)
     {
       j = 0;
@@ -534,6 +538,8 @@ main (int argc, char **argv)
             j++;
         }
     }
+
+  g_ptr_array_sort (app->tests, cmp_tests);
 
   total_tests = app->tests->len;
 
