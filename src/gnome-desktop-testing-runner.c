@@ -602,7 +602,7 @@ main (int argc, char **argv)
             }
         }
       gs_log_structured_print_id_v (TESTS_COMPLETE_MSGID,
-                                    "SUMMARY%s: total: %u passed: %d skipped: %d failed: %d",
+                                    "SUMMARY%s: total=%u; passed=%d; skipped=%d; failed=%d",
                                     ret ? "" : " (incomplete)",
                                     total_tests, n_passed, n_skipped, n_failed);
     }
