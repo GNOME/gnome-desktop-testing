@@ -26,13 +26,14 @@
 #include <string.h>
 
 #define TEST_SKIP_ECODE 77
+#define TEST_RUNNING_STATUS_MSGID   "ed6199045dd38bb5321e551d9578f3d9"
 #define TESTS_COMPLETE_MSGID   "4d013788dd704743b826436c951e551d"
 #define ONE_TEST_FAILED_MSGID  "0eee66bf98514369bef9868327a43cf1"
 #define ONE_TEST_SKIPPED_MSGID "ca0b037012363f1898466829ea163e7d"
 #define ONE_TEST_SUCCESS_MSGID "142bf5d40e9742e99d3ac8c1ace83b36"
 
 typedef struct {
-  int pending_tests;
+  GHashTable *pending_tests;
   GError *test_error;
 
   GCancellable *cancellable;
@@ -176,12 +177,14 @@ static gboolean opt_list;
 static int opt_parallel = 1;
 static char * opt_report_directory;
 static char **opt_dirs;
+static char *opt_status;
 
 static GOptionEntry options[] = {
   { "dir", 'd', 0, G_OPTION_ARG_STRING_ARRAY, &opt_dirs, "Only run tests from these dirs (default: all system data dirs)", NULL },
   { "list", 'l', 0, G_OPTION_ARG_NONE, &opt_list, "List matching tests", NULL },
   { "parallel", 'p', 0, G_OPTION_ARG_INT, &opt_parallel, "Specify parallelization to PROC processors; 0 will be dynamic)", "PROC" },
   { "report-directory", 0, 0, G_OPTION_ARG_FILENAME, &opt_report_directory, "Create a subdirectory per failing test in DIR", "DIR" },
+  { "status", 0, 0, G_OPTION_ARG_STRING, &opt_status, "Output status information (yes/no/auto)", NULL },
   { NULL }
 };
 
@@ -400,7 +403,7 @@ static void
 reschedule_tests (GCancellable *cancellable)
 {
   while (!app->running_exclusive_test
-         && app->pending_tests < app->parallel
+         && g_hash_table_size (app->pending_tests) < app->parallel
          && app->test_index < app->tests->len)
     {
       Test *test = app->tests->pdata[app->test_index];
@@ -416,7 +419,7 @@ reschedule_tests (GCancellable *cancellable)
         }
       run_test_async (test, cancellable,
                       on_test_run_complete, NULL);
-      app->pending_tests++;
+      g_hash_table_insert (app->pending_tests, test, test);
       app->test_index++;
     }
 }
@@ -442,11 +445,36 @@ on_test_run_complete (GObject      *object,
     }
   else
     {
-      app->pending_tests--;
+      gboolean removed = g_hash_table_remove (app->pending_tests, test);
+      g_assert (removed);
       if (test->type == TEST_TYPE_SESSION_EXCLUSIVE)
         app->running_exclusive_test = FALSE;
       reschedule_tests (app->cancellable);
     }
+}
+
+static gboolean
+idle_output_status (gpointer data)
+{
+  GHashTableIter iter;
+  gpointer key, value;
+  GString *status_str = g_string_new ("Executing: ");
+  gboolean first = TRUE;
+
+  g_hash_table_iter_init (&iter, app->pending_tests);
+
+  while (g_hash_table_iter_next (&iter, &key, &value))
+    {
+      Test *test = key;
+      if (!first)
+        g_string_append (status_str, ", ");
+      else
+        first = FALSE;
+      g_string_append (status_str, test->name);
+    }
+  gs_log_structured_print_id_v (TEST_RUNNING_STATUS_MSGID,
+                                "%s", status_str->str);
+  g_string_free (status_str, TRUE);
 }
 
 static gint
@@ -503,6 +531,7 @@ main (int argc, char **argv)
   else
     app->parallel = opt_parallel;
 
+  app->pending_tests = g_hash_table_new (NULL, NULL);
   app->tests = g_ptr_array_new_with_free_func ((GDestroyNotify)g_object_unref);
 
   if (opt_dirs)
@@ -561,9 +590,27 @@ main (int argc, char **argv)
     }
   else
     {
+      gboolean show_status;
+
       reschedule_tests (app->cancellable);
 
-      while (app->pending_tests && !app->test_error)
+      if (opt_status == NULL || strcmp (opt_status, "auto") == 0)
+        show_status = gs_console_get () != NULL;
+      else if (strcmp (opt_status, "no") == 0)
+        show_status = FALSE;
+      else if (strcmp (opt_status, "yes") == 0)
+        show_status = TRUE;
+      else
+        {
+          g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                       "Invalid --status='%s'", opt_status);
+          goto out;
+        }
+
+      if (show_status)
+        g_timeout_add_seconds (5, idle_output_status, app);
+
+      while (g_hash_table_size (app->pending_tests) > 0 && !app->test_error)
         g_main_context_iteration (NULL, TRUE);
 
       if (app->test_error)
@@ -606,6 +653,7 @@ main (int argc, char **argv)
                                     ret ? "" : " (incomplete)",
                                     total_tests, n_passed, n_skipped, n_failed);
     }
+  g_clear_pointer (&app->pending_tests, g_hash_table_unref);
   g_clear_pointer (&app->tests, g_ptr_array_unref);
   if (!ret)
     return 1;
