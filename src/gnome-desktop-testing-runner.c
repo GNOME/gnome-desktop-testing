@@ -477,6 +477,8 @@ idle_output_status (gpointer data)
   gs_log_structured_print_id_v (TEST_RUNNING_STATUS_MSGID,
                                 "%s", status_str->str);
   g_string_free (status_str, TRUE);
+
+  return TRUE;
 }
 
 static gint
