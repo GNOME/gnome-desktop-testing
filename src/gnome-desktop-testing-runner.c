@@ -24,6 +24,8 @@
 #include "gsystem-local-alloc.h"
 
 #include <string.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #define TEST_SKIP_ECODE 77
 #define TEST_RUNNING_STATUS_MSGID   "ed6199045dd38bb5321e551d9578f3d9"
@@ -502,6 +504,25 @@ cmp_tests (gconstpointer adata,
     }
 }
 
+static gint64
+timeval_to_ms (const struct timeval *tv)
+{
+  if (tv->tv_sec == -1L &&
+      tv->tv_usec == -1L)
+    return -1;
+
+  if (tv->tv_sec > (G_MAXUINT64 - tv->tv_usec) / G_USEC_PER_SEC)
+    return -1;
+
+  return ((gint64) tv->tv_sec) * G_USEC_PER_SEC + tv->tv_usec;
+}
+
+static double
+timeval_to_secs (const struct timeval *tv)
+{
+  return ((double)timeval_to_ms (tv)) / G_USEC_PER_SEC;
+}
+
 int
 main (int argc, char **argv)
 {
@@ -629,6 +650,9 @@ main (int argc, char **argv)
     }
   if (!opt_list)
     {
+      struct rusage child_rusage;
+      gs_free char *rusage_str = NULL;
+
       n_passed = n_skipped = n_failed = 0;
       for (i = 0; i < app->tests->len; i++)
         {
@@ -648,10 +672,20 @@ main (int argc, char **argv)
               break;
             }
         }
+
+      if (getrusage (RUSAGE_CHILDREN, &child_rusage) == 0)
+        {
+          rusage_str = g_strdup_printf ("; user=%0.1fs; system=%0.1fs; maxrss=%li",
+                                        timeval_to_secs (&child_rusage.ru_utime),
+                                        timeval_to_secs (&child_rusage.ru_stime),
+                                        child_rusage.ru_maxrss);
+        }
+
       gs_log_structured_print_id_v (TESTS_COMPLETE_MSGID,
-                                    "SUMMARY%s: total=%u; passed=%d; skipped=%d; failed=%d",
+                                    "SUMMARY%s: total=%u; passed=%d; skipped=%d; failed=%d%s",
                                     ret ? "" : " (incomplete)",
-                                    total_tests, n_passed, n_skipped, n_failed);
+                                    total_tests, n_passed, n_skipped, n_failed,
+                                    rusage_str != NULL ? rusage_str : "");
     }
   g_clear_pointer (&app->pending_tests, g_hash_table_unref);
   g_clear_pointer (&app->tests, g_ptr_array_unref);
