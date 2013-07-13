@@ -415,7 +415,7 @@ reschedule_tests (GCancellable *cancellable)
           /* If our next text is exclusive, wait until any other
            * pending async tests have run.
            */
-          if (app->pending_tests > 0)
+          if (g_hash_table_size (app->pending_tests) > 0)
             break;
           app->running_exclusive_test = TRUE;
         }
