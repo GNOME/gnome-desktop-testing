@@ -24,8 +24,13 @@
 #include "gsystem-local-alloc.h"
 
 #include <string.h>
+#include <errno.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+
+#ifdef ENABLE_SYSTEMD_JOURNAL
+#include <systemd/sd-journal.h>
+#endif
 
 #define TEST_SKIP_ECODE 77
 #define TEST_RUNNING_STATUS_MSGID   "ed6199045dd38bb5321e551d9578f3d9"
@@ -314,6 +319,27 @@ on_test_exited (GObject       *obj,
     g_task_return_boolean (task, TRUE);
 }
 
+static void
+setup_test_child (gpointer user_data)
+{
+#ifdef ENABLE_SYSTEMD_JOURNAL
+  Test *test = user_data;
+  int journalfd;
+  
+  journalfd = sd_journal_stream_fd (test->name, LOG_INFO, 0);
+  if (journalfd >= 0)
+    {
+      int ret;
+      do
+        ret = dup2 (journalfd, 1);
+      while (ret == -1 && errno == EINTR);
+      do
+        ret = dup2 (journalfd, 2);
+      while (ret == -1 && errno == EINTR);
+    }
+#endif
+}
+
 static gboolean
 run_test_async (Test                *test,
                 GCancellable        *cancellable,
@@ -376,6 +402,10 @@ run_test_async (Test                *test,
 
   proc_context = gs_subprocess_context_new (test->argv);
   gs_subprocess_context_set_cwd (proc_context, test_tmpdir);
+#ifdef ENABLE_SYSTEMD_JOURNAL
+  if (gs_stdout_is_journal ())
+    gs_subprocess_context_set_child_setup (proc_context, setup_test_child, test);
+#endif
 
   proc = gs_subprocess_new (proc_context, cancellable, error);
   if (!proc)
