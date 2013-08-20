@@ -667,7 +667,10 @@ main (int argc, char **argv)
         g_main_context_iteration (NULL, TRUE);
 
       if (app->test_error)
-        g_propagate_error (error, app->test_error);
+        {
+          g_propagate_error (error, app->test_error);
+          goto out;
+        }
     }
 
   ret = TRUE;
