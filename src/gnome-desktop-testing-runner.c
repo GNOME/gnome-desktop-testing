@@ -185,6 +185,7 @@ static int opt_parallel = 1;
 static char * opt_report_directory;
 static char **opt_dirs;
 static char *opt_status;
+static char *opt_log_msgid;
 
 static GOptionEntry options[] = {
   { "dir", 'd', 0, G_OPTION_ARG_STRING_ARRAY, &opt_dirs, "Only run tests from these dirs (default: all system data dirs)", NULL },
@@ -192,6 +193,7 @@ static GOptionEntry options[] = {
   { "parallel", 'p', 0, G_OPTION_ARG_INT, &opt_parallel, "Specify parallelization to PROC processors; 0 will be dynamic)", "PROC" },
   { "report-directory", 0, 0, G_OPTION_ARG_FILENAME, &opt_report_directory, "Create a subdirectory per failing test in DIR", "DIR" },
   { "status", 0, 0, G_OPTION_ARG_STRING, &opt_status, "Output status information (yes/no/auto)", NULL },
+  { "log-msgid", 0, 0, G_OPTION_ARG_STRING, &opt_log_msgid, "Log unique message with id MSGID=MESSAGE", "MSGID" },
   { NULL }
 };
 
@@ -578,6 +580,19 @@ main (int argc, char **argv)
 
   if (!g_option_context_parse (context, &argc, &argv, error))
     goto out;
+
+  /* This is a hack to allow external gjs programs that don't link to
+   * libgsystem to log to systemd.
+   */
+  if (opt_log_msgid)
+    {
+      const char *eq = strchr (opt_log_msgid, '=');
+      gs_free char *msgid = NULL;
+      g_assert (eq);
+      msgid = g_strndup (opt_log_msgid, eq - opt_log_msgid);
+      gs_log_structured_print_id_v (msgid, "%s", eq + 1);
+      exit (0);
+    }
 
   if (opt_parallel == 0)
     app->parallel = g_get_num_processors ();
