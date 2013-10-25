@@ -742,5 +742,7 @@ main (int argc, char **argv)
   g_clear_pointer (&app->tests, g_ptr_array_unref);
   if (!ret)
     return 1;
+  if (n_failed > 0)
+    return 2;
   return 0;
 }
