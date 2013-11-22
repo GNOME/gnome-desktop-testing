@@ -263,6 +263,44 @@ gather_all_tests_recurse (GFile         *prefix_root,
 }
 
 static void
+log_test_completion (Test *test,
+                     const char *reason)
+{
+  gs_free char *testkey = NULL;
+  const char *msgid_value;
+  gs_free char *msgid = NULL;
+  gs_free char *msg = NULL;
+  char *keys[3] = {NULL, NULL, NULL};
+
+  if (test->state == TEST_STATE_COMPLETE_SUCCESS)
+    {
+      msgid_value = ONE_TEST_SUCCESS_MSGID;
+      msg = g_strconcat ("PASS: ", test->name, NULL);
+    }
+  else if (test->state == TEST_STATE_COMPLETE_FAILED)
+    {
+      msgid_value = ONE_TEST_FAILED_MSGID;
+      msg = g_strconcat ("FAILED: ", test->name, " (", reason, ")", NULL);
+    }
+  else if (test->state == TEST_STATE_COMPLETE_SKIPPED)
+    {
+      msgid_value = ONE_TEST_SKIPPED_MSGID;
+      msg = g_strconcat ("SKIPPED: ", test->name, NULL);
+    }
+  else
+    g_assert_not_reached ();
+
+  testkey = g_strconcat ("GDTR_TEST=", test->name, NULL);
+  msgid = g_strconcat ("MESSAGE_ID=", msgid_value, NULL);
+
+  keys[0] = testkey;
+  keys[1] = msgid;
+  keys[2] = NULL;
+
+  gs_log_structured (msg, (const char *const*)keys);
+}
+
+static void
 on_test_exited (GObject       *obj,
                 GAsyncResult  *result,
                 gpointer       user_data)
@@ -289,14 +327,12 @@ on_test_exited (GObject       *obj,
       if (g_error_matches (tmp_error, G_SPAWN_EXIT_ERROR, 77))
         {
           test->state = TEST_STATE_COMPLETE_SKIPPED;
-          gs_log_structured_print_id_v (ONE_TEST_SKIPPED_MSGID,
-                                        "Test %s skipped (exit code 77)", test->name);
+          log_test_completion (test, NULL);
         }
       else
         {
           test->state = TEST_STATE_COMPLETE_FAILED;
-          gs_log_structured_print_id_v (ONE_TEST_FAILED_MSGID,
-                                        "FAILED: %s: %s", test->name, tmp_error->message); 
+          log_test_completion (test, tmp_error->message);
           failed = TRUE;
         }
       /* Individual test failures don't count as failure of the whole process */
@@ -304,8 +340,8 @@ on_test_exited (GObject       *obj,
     }
   else
     {
-      gs_log_structured_print_id_v (ONE_TEST_SUCCESS_MSGID, "PASS: %s", test->name);
       test->state = TEST_STATE_COMPLETE_SUCCESS;
+      log_test_completion (test, NULL);
     }
   
   /* Keep around temporaries from failed tests */
