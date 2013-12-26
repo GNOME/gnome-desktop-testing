@@ -575,6 +575,22 @@ cmp_tests (gconstpointer adata,
     }
 }
 
+static void
+fisher_yates_shuffle (GPtrArray *tests)
+{
+  guint m = tests->len;
+
+  while (m > 0)
+    {
+      guint i = g_random_int_range (0, m);
+      gpointer val;
+      m--;
+      val = tests->pdata[m];
+      tests->pdata[m] = tests->pdata[i];
+      tests->pdata[i] = val;
+    }
+}
+
 static gint64
 timeval_to_ms (const struct timeval *tv)
 {
@@ -681,12 +697,11 @@ main (int argc, char **argv)
         }
     }
 
-  g_ptr_array_sort (app->tests, cmp_tests);
-
   total_tests = app->tests->len;
 
   if (opt_list)
     {
+      g_ptr_array_sort (app->tests, cmp_tests);
       for (i = 0; i < app->tests->len; i++)
         {
           Test *test = app->tests->pdata[i];
@@ -696,6 +711,8 @@ main (int argc, char **argv)
   else
     {
       gboolean show_status;
+
+      fisher_yates_shuffle (app->tests);
 
       reschedule_tests (app->cancellable);
 
