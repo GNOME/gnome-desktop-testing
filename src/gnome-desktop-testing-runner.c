@@ -198,7 +198,7 @@ static GOptionEntry options[] = {
   { NULL }
 };
 
-static gboolean
+static void
 run_test_async (Test                *test,
                 GCancellable        *cancellable,
                 GAsyncReadyCallback  callback,
@@ -378,7 +378,7 @@ setup_test_child (gpointer user_data)
 #endif
 }
 
-static gboolean
+static void
 run_test_async (Test                *test,
                 GCancellable        *cancellable,
                 GAsyncReadyCallback  callback,
