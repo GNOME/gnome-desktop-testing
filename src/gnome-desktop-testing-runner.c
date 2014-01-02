@@ -313,7 +313,6 @@ on_test_exited (GObject       *obj,
   GTask *task = G_TASK (user_data);
   GCancellable *cancellable = g_task_get_cancellable (task);
   Test *test;
-  GFile *test_tmpdir_f;
   gboolean failed = FALSE;
 
   test = g_task_get_source_object (task);
@@ -397,13 +396,6 @@ run_test_async (Test                *test,
   gs_free char *test_tmpname = NULL;
   gs_unref_object GSSubprocessContext *proc_context = NULL;
   gs_unref_object GSSubprocess *proc = NULL;
-  GError *tmp_error = NULL;
-  int test_argc;
-  char **test_argv = NULL;
-  gboolean test_success = TRUE;
-  gboolean failed = FALSE;
-  const char *test_path;
-  int estatus;
   GTask *task;
 
   g_assert (test->state == TEST_STATE_LOADED);
@@ -621,7 +613,6 @@ main (int argc, char **argv)
   int i, j;
   GOptionContext *context;
   TestRunnerApp appstruct;
-  GPtrArray *test_paths;
   const char *const *datadirs_iter;
   int n_passed, n_skipped, n_failed;
 
