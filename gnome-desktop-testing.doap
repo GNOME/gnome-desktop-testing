@@ -8,13 +8,17 @@
   <name>gnome-desktop-testing</name>
   <shortname>gnome-desktop-testing</shortname>
 
-  <shortdesc xml:lang="en">GNOME OSTree testing code</shortdesc>
+  <shortdesc xml:lang="en">Runner for InstalledTests specification</shortdesc>
 
-  <description xml:lang="en">GNOME OSTree testing code</description>
+  <description xml:lang="en">The InstalledTests specification
+  describes how components (packages) can install their tests into the
+  target root, in addition to (or instead of) providing "make check".
+  This separates building from testing, which has numerous benefits.
+  </description>
 
-  <homepage rdf:resource="https://live.gnome.org/OSTree/GnomeOSTree" />
+  <homepage rdf:resource="https://wiki.gnome.org/Initiatives/GnomeGoals/InstalledTests" />
   <license rdf:resource="http://usefulinc.com/doap/licenses/lgpl" />
-  <mailing-list rdf:resource="mailto:ostree-list@gnome.org" />
+  <mailing-list rdf:resource="mailto:desktop-devel-list@gnome.org" />
 
   <programming-language>C</programming-language>
 
