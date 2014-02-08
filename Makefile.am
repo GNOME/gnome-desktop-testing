@@ -35,12 +35,6 @@ privlib_LTLIBRARIES =
 privlib_DATA =
 INSTALL_DATA_HOOKS =
 
-libgsystem_srcpath := src/libgsystem
-libgsystem_cflags = $(GIO_UNIX_CFLAGS) $(SYSTEMD_JOURNAL_CFLAGS) -I$(srcdir)/src/libgsystem
-libgsystem_libs = $(GIO_UNIX_LIBS) $(SYSTEMD_JOURNAL_LIBS)
-include src/libgsystem/Makefile-libgsystem.am
-privlib_LTLIBRARIES += libgsystem.la
-
 include Makefile-tests.am
 
 install-data-hook: $(INSTALL_DATA_HOOKS)
