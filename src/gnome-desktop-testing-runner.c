@@ -182,6 +182,7 @@ load_test (GFile         *prefix_root,
 static TestRunnerApp *app;
 
 static gboolean opt_list;
+static int opt_firstroot;
 static int opt_parallel = 1;
 static char * opt_report_directory;
 static char **opt_dirs;
@@ -192,6 +193,7 @@ static GOptionEntry options[] = {
   { "dir", 'd', 0, G_OPTION_ARG_STRING_ARRAY, &opt_dirs, "Only run tests from these dirs (default: all system data dirs)", NULL },
   { "list", 'l', 0, G_OPTION_ARG_NONE, &opt_list, "List matching tests", NULL },
   { "parallel", 'p', 0, G_OPTION_ARG_INT, &opt_parallel, "Specify parallelization to PROC processors; 0 will be dynamic)", "PROC" },
+  { "first-root", 0, 0, G_OPTION_ARG_NONE, &opt_firstroot, "Only use first entry in XDG_DATA_DIRS", "PROC" },
   { "report-directory", 0, 0, G_OPTION_ARG_FILENAME, &opt_report_directory, "Create a subdirectory per failing test in DIR", "DIR" },
   { "status", 0, 0, G_OPTION_ARG_STRING, &opt_status, "Output status information (yes/no/auto)", NULL },
   { "log-msgid", 0, 0, G_OPTION_ARG_STRING, &opt_log_msgid, "Log unique message with id MSGID=MESSAGE", "MSGID" },
@@ -663,6 +665,9 @@ main (int argc, char **argv)
       if (!gather_all_tests_recurse (prefix_root, prefix_root, "", app->tests,
                                      cancellable, error))
         goto out;
+
+      if (opt_firstroot)
+        break;
     }
 
   if (argc > 1)
