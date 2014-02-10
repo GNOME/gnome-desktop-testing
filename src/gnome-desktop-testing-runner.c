@@ -299,7 +299,7 @@ log_test_completion (Test *test,
   keys[1] = msgid;
   keys[2] = NULL;
 
-  gs_log_structured (msg, (const char *const*)keys);
+  gs_log_structured_print (msg, (const char *const*)keys);
 }
 
 static void
