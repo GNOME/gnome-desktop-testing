@@ -393,7 +393,6 @@ run_test_async (Test                *test,
   GError **error = &local_error;
   gs_free char *testname = NULL;
   gs_free char *test_tmpdir = NULL;
-  gs_unref_object GFile *test_tmpdir_f = NULL;
   gs_free char *test_squashed_name = NULL;
   gs_free char *test_tmpname = NULL;
   gs_unref_object GSSubprocessContext *proc_context = NULL;
@@ -427,18 +426,28 @@ run_test_async (Test                *test,
     {
       test_tmpdir = g_build_filename (opt_report_directory, test_squashed_name, NULL);
       test->tmpdir = g_file_new_for_path (test_tmpdir);
-      if (!gs_shutil_rm_rf (test_tmpdir_f, cancellable, error))
+      if (!gs_shutil_rm_rf (test->tmpdir, cancellable, error))
         goto out;
-      if (!gs_file_ensure_directory (test_tmpdir_f, TRUE, cancellable, error))
+      if (!gs_file_ensure_directory (test->tmpdir, TRUE, cancellable, error))
         goto out;
     }
 
   proc_context = gs_subprocess_context_new (test->argv);
   gs_subprocess_context_set_cwd (proc_context, test_tmpdir);
+  if (!opt_report_directory)
+    {
 #ifdef ENABLE_SYSTEMD_JOURNAL
-  if (gs_stdout_is_journal ())
-    gs_subprocess_context_set_child_setup (proc_context, setup_test_child, test);
+      if (gs_stdout_is_journal ())
+        gs_subprocess_context_set_child_setup (proc_context, setup_test_child, test);
 #endif
+    }
+  else
+    {
+      gs_free char *test_output_filename = g_strconcat ("output-", test_squashed_name, ".txt", NULL);
+      gs_free char *test_output_path = g_build_filename (opt_report_directory, test_output_filename, NULL);
+      gs_subprocess_context_set_stdout_file_path (proc_context, test_output_path);
+      gs_subprocess_context_set_stderr_disposition (proc_context, GS_SUBPROCESS_STREAM_DISPOSITION_STDERR_MERGE);
+    }
 
   proc = gs_subprocess_new (proc_context, cancellable, error);
   if (!proc)
