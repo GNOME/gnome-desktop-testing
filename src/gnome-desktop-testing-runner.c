@@ -39,6 +39,7 @@
 #define ONE_TEST_FAILED_MSGID  "0eee66bf98514369bef9868327a43cf1"
 #define ONE_TEST_SKIPPED_MSGID "ca0b037012363f1898466829ea163e7d"
 #define ONE_TEST_SUCCESS_MSGID "142bf5d40e9742e99d3ac8c1ace83b36"
+#define ONE_TEST_TIMED_OUT_MSGID  "db8f25eab14a4da68ef3ab3ce4b2c0bb"
 
 typedef struct {
   GHashTable *pending_tests;
@@ -81,6 +82,7 @@ typedef struct _Test
 
   TestState state;
   TestType type;
+  guint timeout;
 } Test;
 
 typedef struct _TestClass
@@ -184,6 +186,7 @@ static TestRunnerApp *app;
 static gboolean opt_list;
 static int opt_firstroot;
 static int opt_parallel = 1;
+static int opt_cancel_timeout = 5*60;
 static char * opt_report_directory;
 static char **opt_dirs;
 static char *opt_status;
@@ -197,6 +200,7 @@ static GOptionEntry options[] = {
   { "report-directory", 0, 0, G_OPTION_ARG_FILENAME, &opt_report_directory, "Create a subdirectory per failing test in DIR", "DIR" },
   { "status", 0, 0, G_OPTION_ARG_STRING, &opt_status, "Output status information (yes/no/auto)", NULL },
   { "log-msgid", 0, 0, G_OPTION_ARG_STRING, &opt_log_msgid, "Log unique message with id MSGID=MESSAGE", "MSGID" },
+  { "timeout", 't', 0, G_OPTION_ARG_INT, &opt_cancel_timeout, "Cancel test after timeout seconds; defaults to 5 minutes", "TIMEOUT" },
   { NULL }
 };
 
@@ -341,6 +345,10 @@ on_test_exited (GObject       *obj,
     }
   else
     {
+      if (test->timeout) {
+        g_source_remove (test->timeout);
+        test->timeout = 0;
+      }
       test->state = TEST_STATE_COMPLETE_SUCCESS;
       log_test_completion (test, NULL);
     }
@@ -378,6 +386,17 @@ setup_test_child (gpointer user_data)
       while (ret == -1 && errno == EINTR);
     }
 #endif
+}
+
+static gboolean
+cancel_test (gpointer data)
+{
+  gs_unref_object GSSubprocess *proc = data;
+  gs_subprocess_force_exit (proc);
+  gs_log_structured_print_id_v (ONE_TEST_TIMED_OUT_MSGID,
+                                "Test timed out after %u seconds",
+                                opt_cancel_timeout);
+  return FALSE;
 }
 
 static void
@@ -456,6 +475,7 @@ run_test_async (Test                *test,
   test->state = TEST_STATE_EXECUTING;
 
   gs_subprocess_wait (proc, cancellable, on_test_exited, task);
+  test->timeout = g_timeout_add_seconds (opt_cancel_timeout, cancel_test, g_object_ref (proc));
 
  out:
   if (local_error)
