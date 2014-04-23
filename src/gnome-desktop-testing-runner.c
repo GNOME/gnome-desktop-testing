@@ -462,8 +462,8 @@ run_test_async (Test                *test,
     }
   else
     {
-      gs_free char *test_output_filename = g_strconcat ("output-", test_squashed_name, ".txt", NULL);
-      gs_free char *test_output_path = g_build_filename (opt_report_directory, test_output_filename, NULL);
+      const char *test_output_filename = "output.txt";
+      gs_free char *test_output_path = g_build_filename (test_tmpdir, test_output_filename, NULL);
       gs_subprocess_context_set_stdout_file_path (proc_context, test_output_path);
       gs_subprocess_context_set_stderr_disposition (proc_context, GS_SUBPROCESS_STREAM_DISPOSITION_STDERR_MERGE);
     }
