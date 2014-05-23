@@ -18,5 +18,5 @@
 bin_PROGRAMS += gnome-desktop-testing-runner
 gnome_desktop_testing_runner_SOURCES = src/gnome-desktop-testing-runner.c
 gnome_desktop_testing_runner_CPPFLAGS = $(AM_CPPFLAGS)
-gnome_desktop_testing_runner_CFLAGS = $(BUILDDEP_GDT_CFLAGS)
-gnome_desktop_testing_runner_LDADD = $(BUILDDEP_GDT_LIBS)
+gnome_desktop_testing_runner_CFLAGS = $(BUILDDEP_GDT_CFLAGS) $(SYSTEMD_JOURNAL_CFLAGS)
+gnome_desktop_testing_runner_LDADD = $(BUILDDEP_GDT_LIBS) $(SYSTEMD_JOURNAL_LIBS)
