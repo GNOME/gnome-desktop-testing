@@ -382,10 +382,10 @@ on_test_exited (GObject       *obj,
     g_task_return_boolean (task, TRUE);
 }
 
+#ifdef ENABLE_SYSTEMD_JOURNAL
 static void
 setup_test_child (gpointer user_data)
 {
-#ifdef ENABLE_SYSTEMD_JOURNAL
   Test *test = user_data;
   int journalfd;
   
@@ -400,8 +400,8 @@ setup_test_child (gpointer user_data)
         ret = dup2 (journalfd, 2);
       while (ret == -1 && errno == EINTR);
     }
-#endif
 }
+#endif
 
 static gboolean
 cancel_test (gpointer data)
