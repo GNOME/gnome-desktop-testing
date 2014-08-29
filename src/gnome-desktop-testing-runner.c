@@ -79,6 +79,7 @@ typedef struct _Test
 
   char *name;
   char **argv;
+  char **envp;
 
   TestState state;
   TestType type;
@@ -98,6 +99,7 @@ test_finalize (GObject *gobject)
 {
   Test *self = (Test*) gobject;
   g_strfreev (self->argv);
+  g_strfreev (self->envp);
   g_clear_object (&self->tmpdir);
   g_object_unref (self->prefix_root);
   g_object_unref (self->path);
@@ -132,6 +134,8 @@ load_test (GFile         *prefix_root,
   gs_free char *exec_key = NULL;
   gs_free char *type_key = NULL;
   const char *test_path;
+  char **env_key = NULL;
+  GError *internal_error = NULL;
 
   test = g_object_new (test_get_type (), NULL);
 
@@ -168,7 +172,15 @@ load_test (GFile         *prefix_root,
                    "Unknown test type '%s'", type_key);
       goto out;
     }
-  
+
+  env_key = g_key_file_get_string_list (keyfile, "Test", "TestEnvironment", NULL, &internal_error);
+  if (internal_error != NULL &&
+      !(internal_error->domain == G_KEY_FILE_ERROR &&
+        internal_error->code == G_KEY_FILE_ERROR_KEY_NOT_FOUND))
+    goto out;
+  else
+    test->envp = env_key;
+
   test->state = TEST_STATE_LOADED;
 
   ret = TRUE;
@@ -177,6 +189,7 @@ load_test (GFile         *prefix_root,
  out:
   if (!ret && test)
     g_prefix_error (error, "Test '%s': ", test->name);
+  g_clear_error (&internal_error);
   g_clear_pointer (&keyfile, g_key_file_free);
   return ret;
 }
@@ -453,6 +466,7 @@ run_test_async (Test                *test,
 
   proc_context = gs_subprocess_context_new (test->argv);
   gs_subprocess_context_set_cwd (proc_context, test_tmpdir);
+  gs_subprocess_context_set_environment (proc_context, test->envp);
   if (!opt_report_directory)
     {
 #ifdef ENABLE_SYSTEMD_JOURNAL
