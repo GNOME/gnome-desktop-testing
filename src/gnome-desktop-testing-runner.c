@@ -47,6 +47,7 @@ typedef struct {
 
   GCancellable *cancellable;
   GPtrArray *tests;
+  GPtrArray *failed_test_msgs;
 
   int parallel;
   int test_index;
@@ -300,6 +301,7 @@ log_test_completion (Test *test,
     {
       msgid_value = ONE_TEST_FAILED_MSGID;
       msg = g_strconcat ("FAILED: ", test->name, " (", reason, ")", NULL);
+      g_ptr_array_add (app->failed_test_msgs, g_strdup (msg));
     }
   else if (test->state == TEST_STATE_COMPLETE_SKIPPED)
     {
@@ -690,6 +692,7 @@ main (int argc, char **argv)
 
   app->pending_tests = g_hash_table_new (NULL, NULL);
   app->tests = g_ptr_array_new_with_free_func ((GDestroyNotify)g_object_unref);
+  app->failed_test_msgs = g_ptr_array_new_with_free_func ((GDestroyNotify)g_free);
 
   if (opt_dirs)
     datadirs_iter = (const char *const*) opt_dirs;
@@ -829,6 +832,11 @@ main (int argc, char **argv)
                                     ret ? "" : " (incomplete)",
                                     total_tests, n_passed, n_skipped, n_failed,
                                     rusage_str != NULL ? rusage_str : "");
+      if (gs_console_get ())
+        {
+          for (i = 0; i < app->failed_test_msgs->len; i++)
+            g_print ("%s\n", app->failed_test_msgs->pdata[i]);
+        }
     }
   g_clear_pointer (&app->pending_tests, g_hash_table_unref);
   g_clear_pointer (&app->tests, g_ptr_array_unref);
