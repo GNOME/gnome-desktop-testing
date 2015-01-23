@@ -212,7 +212,7 @@ static GOptionEntry options[] = {
   { "parallel", 'p', 0, G_OPTION_ARG_INT, &opt_parallel, "Specify parallelization to PROC processors; 0 will be dynamic)", "PROC" },
   { "first-root", 0, 0, G_OPTION_ARG_NONE, &opt_firstroot, "Only use first entry in XDG_DATA_DIRS", "PROC" },
   { "report-directory", 0, 0, G_OPTION_ARG_FILENAME, &opt_report_directory, "Create a subdirectory per failing test in DIR", "DIR" },
-  { "status", 0, 0, G_OPTION_ARG_STRING, &opt_status, "Output status information (yes/no/auto)", NULL },
+  { "status", 0, 0, G_OPTION_ARG_STRING, &opt_status, "Output status information", "yes/no/auto" },
   { "log-msgid", 0, 0, G_OPTION_ARG_STRING, &opt_log_msgid, "Log unique message with id MSGID=MESSAGE", "MSGID" },
   { "timeout", 't', 0, G_OPTION_ARG_INT, &opt_cancel_timeout, "Cancel test after timeout seconds; defaults to 5 minutes", "TIMEOUT" },
   { NULL }
