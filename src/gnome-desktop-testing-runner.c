@@ -835,7 +835,7 @@ main (int argc, char **argv)
       if (gs_console_get ())
         {
           for (i = 0; i < app->failed_test_msgs->len; i++)
-            g_print ("%s\n", app->failed_test_msgs->pdata[i]);
+            g_print ("%s\n", (char *) app->failed_test_msgs->pdata[i]);
         }
     }
   g_clear_pointer (&app->pending_tests, g_hash_table_unref);
