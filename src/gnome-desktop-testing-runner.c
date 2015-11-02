@@ -300,13 +300,13 @@ log_test_completion (Test *test,
   else if (test->state == TEST_STATE_COMPLETE_FAILED)
     {
       msgid_value = ONE_TEST_FAILED_MSGID;
-      msg = g_strconcat ("FAILED: ", test->name, " (", reason, ")", NULL);
+      msg = g_strconcat ("FAIL: ", test->name, " (", reason, ")", NULL);
       g_ptr_array_add (app->failed_test_msgs, g_strdup (msg));
     }
   else if (test->state == TEST_STATE_COMPLETE_SKIPPED)
     {
       msgid_value = ONE_TEST_SKIPPED_MSGID;
-      msg = g_strconcat ("SKIPPED: ", test->name, NULL);
+      msg = g_strconcat ("SKIP: ", test->name, NULL);
     }
   else
     g_assert_not_reached ();
