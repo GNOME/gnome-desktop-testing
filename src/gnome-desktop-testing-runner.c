@@ -371,8 +371,12 @@ on_test_exited (GObject       *obj,
   /* Keep around temporaries from failed tests */
   if (!(failed && opt_report_directory))
     {
-      if (!gs_shutil_rm_rf (test->tmpdir, cancellable, error))
-        goto out;
+      gs_unref_object GFile *test_tmpdir_stamp = g_file_get_child (test->tmpdir, ".testtmp");
+      if (g_file_query_exists (test_tmpdir_stamp, NULL))
+        {
+          if (!gs_shutil_rm_rf (test->tmpdir, cancellable, error))
+            goto out;
+        }
     }
 
  out:
@@ -465,6 +469,22 @@ run_test_async (Test                *test,
       if (!gs_file_ensure_directory (test->tmpdir, TRUE, cancellable, error))
         goto out;
     }
+
+  /* We create a .testtmp stamp file so that tests can *know* for sure
+   * they're in a temporary directory.  This is used by at least the
+   * OSTree tests as protection against someone running a test script
+   * outside of the framework, as it might overwrite files in their
+   * source directory, etc.
+   *
+   * Also, when we do the rm -rf, we test for the file to be doubly
+   * sure that we're deleting the right tmpdir.
+   */ 
+  {
+    gs_unref_object GFile *test_tmpdir_stamp = g_file_get_child (test->tmpdir, ".testtmp");
+
+    if (!g_file_replace_contents (test_tmpdir_stamp, "", 0, NULL, FALSE, 0, NULL, cancellable, error))
+      goto out;
+  }
 
   proc_context = gs_subprocess_context_new (test->argv);
   gs_subprocess_context_set_cwd (proc_context, test_tmpdir);
