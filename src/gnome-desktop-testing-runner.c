@@ -666,6 +666,9 @@ main (int argc, char **argv)
   memset (&appstruct, 0, sizeof (appstruct));
   app = &appstruct;
 
+  /* avoid gvfs (http://bugzilla.gnome.org/show_bug.cgi?id=526454) */
+  g_setenv ("GIO_USE_VFS", "local", TRUE);
+
   context = g_option_context_new ("[PREFIX...] - Run installed tests");
   g_option_context_add_main_entries (context, options, NULL);
 
