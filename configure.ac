@@ -27,19 +27,8 @@ AC_SUBST(WARN_CFLAGS)
 LT_PREREQ([2.2.4])
 LT_INIT([disable-static])
 
-PKG_CHECK_MODULES(BUILDDEP_GDT, [gio-unix-2.0 >= 2.34.0 libgsystem])
+PKG_CHECK_MODULES(BUILDDEP_GDT, [gio-unix-2.0 >= 2.34.0 libsystemd])
 GIO_UNIX_CFLAGS="$GIO_UNIX_CFLAGS -DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_36 -DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_36"
-
-AC_ARG_WITH(systemd-journal,
-	    AS_HELP_STRING([--without-systemd-journal], [Use systemd @<:@default=auto@:>@]),
-	    [], [with_systemd_journal=auto])
-AS_IF([test x$with_systemd_journal != xno], [
-  PKG_CHECK_MODULES([SYSTEMD_JOURNAL], [libsystemd], have_systemd_journal=yes, have_systemd_journal=no)
-  ])
-AM_CONDITIONAL(ENABLE_SYSTEMD_JOURNAL, test x$have_systemd_journal = xyes)
-AS_IF([test x$have_systemd_journal = xyes], [
-  AC_DEFINE([ENABLE_SYSTEMD_JOURNAL],[1],[Define if you want to build with systemd journal support])
-])
 
 AC_CONFIG_FILES([
 Makefile

@@ -20,18 +20,14 @@
 
 
 #include "config.h"
-#include "libgsystem.h"
-#include "gsystem-local-alloc.h"
 
+#include <gio/gio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <sys/time.h>
 #include <sys/resource.h>
-
-#ifdef ENABLE_SYSTEMD_JOURNAL
 #include <systemd/sd-journal.h>
-#endif
 
 #define TEST_SKIP_ECODE 77
 #define TEST_RUNNING_STATUS_MSGID   "ed6199045dd38bb5321e551d9578f3d9"
@@ -40,6 +36,20 @@
 #define ONE_TEST_SKIPPED_MSGID "ca0b037012363f1898466829ea163e7d"
 #define ONE_TEST_SUCCESS_MSGID "142bf5d40e9742e99d3ac8c1ace83b36"
 #define ONE_TEST_TIMED_OUT_MSGID  "db8f25eab14a4da68ef3ab3ce4b2c0bb"
+
+static gboolean
+rm_rf (GFile *path, GError **error)
+{
+  int estatus;
+  g_autofree char *pathstr = g_file_get_path (path);
+  char *child_argv[] = { "rm", "-rf", pathstr, NULL };
+  if (!g_spawn_sync (NULL, (char**)child_argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL,
+                     NULL, NULL, &estatus, error))
+    return FALSE;
+  if (!g_spawn_check_exit_status (estatus, error))
+    return FALSE;
+  return TRUE;
+}
 
 typedef struct {
   GHashTable *pending_tests;
@@ -70,7 +80,7 @@ typedef enum {
   TEST_TYPE_SESSION_EXCLUSIVE
 } TestType;
 
-typedef struct _Test
+typedef struct
 {
   GObject parent_instance;
 
@@ -85,60 +95,60 @@ typedef struct _Test
   TestState state;
   TestType type;
   guint timeout;
-} Test;
+} GdtrTest;
 
-typedef struct _TestClass
+typedef struct _GdtrTestClass
 {
   GObjectClass parent_class;
-} TestClass;
+} GdtrTestClass;
 
-static GType test_get_type (void);
-G_DEFINE_TYPE (Test, test, G_TYPE_OBJECT);
+static GType gdtr_test_get_type (void);
+G_DEFINE_TYPE (GdtrTest, gdtr_test, G_TYPE_OBJECT);
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(GdtrTest, g_object_unref);
 
 static void
-test_finalize (GObject *gobject)
+gdtr_test_finalize (GObject *gobject)
 {
-  Test *self = (Test*) gobject;
+  GdtrTest *self = (GdtrTest*) gobject;
   g_strfreev (self->argv);
   g_strfreev (self->envp);
   g_clear_object (&self->tmpdir);
   g_object_unref (self->prefix_root);
   g_object_unref (self->path);
 
-  G_OBJECT_CLASS (test_parent_class)->finalize (gobject);
+  G_OBJECT_CLASS (gdtr_test_parent_class)->finalize (gobject);
 }
 
 static void
-test_class_init (TestClass *klass)
+gdtr_test_class_init (GdtrTestClass *klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
-  
-  gobject_class->finalize = test_finalize;
+  gobject_class->finalize = gdtr_test_finalize;
 }
 
 static void
-test_init (Test *self)
+gdtr_test_init (GdtrTest *self)
 {
 }
 
 static gboolean
 load_test (GFile         *prefix_root,
            GFile         *path,
-           Test         **out_test,
+           GdtrTest         **out_test,
            GCancellable  *cancellable,
            GError       **error)
 {
   gboolean ret = FALSE;
   GKeyFile *keyfile = NULL;
-  gs_unref_object Test *test = NULL;
+  g_autoptr(GdtrTest) test = NULL;
   int test_argc;
-  gs_free char *exec_key = NULL;
-  gs_free char *type_key = NULL;
-  const char *test_path;
+  g_autofree char *exec_key = NULL;
+  g_autofree char *type_key = NULL;
+  g_autofree char *test_path = NULL;
   char **env_key = NULL;
   GError *internal_error = NULL;
 
-  test = g_object_new (test_get_type (), NULL);
+  test = g_object_new (gdtr_test_get_type (), NULL);
 
   g_assert (test->state == TEST_STATE_UNLOADED);
 
@@ -147,7 +157,7 @@ load_test (GFile         *prefix_root,
 
   test->name = g_file_get_relative_path (test->prefix_root, test->path);
 
-  test_path = gs_file_get_path_cached (test->path);
+  test_path = g_file_get_path (test->path);
 
   keyfile = g_key_file_new ();
   if (!g_key_file_load_from_file (keyfile, test_path, 0, error))
@@ -219,7 +229,7 @@ static GOptionEntry options[] = {
 };
 
 static void
-run_test_async (Test                *test,
+run_test_async (GdtrTest                *test,
                 GCancellable        *cancellable,
                 GAsyncReadyCallback  callback,
                 gpointer             user_data);
@@ -237,10 +247,10 @@ gather_all_tests_recurse (GFile         *prefix_root,
                           GError       **error)
 {
   gboolean ret = FALSE;
-  gs_unref_object GFileEnumerator *dir_enum = NULL;
-  gs_unref_object GFileInfo *info = NULL;
-  gs_free char *suite_name = NULL;
-  gs_free char *suite_prefix = NULL;
+  g_autoptr(GFileEnumerator) dir_enum = NULL;
+  g_autoptr(GFileInfo) info = NULL;
+  g_autofree char *suite_name = NULL;
+  g_autofree char *suite_prefix = NULL;
   GError *tmp_error = NULL;
 
   suite_name = g_file_get_basename (dir);
@@ -254,11 +264,11 @@ gather_all_tests_recurse (GFile         *prefix_root,
     {
       GFileType type = g_file_info_get_file_type (info);
       const char *name = g_file_info_get_name (info);
-      gs_unref_object GFile *child = g_file_get_child (dir, name);
+      g_autoptr(GFile) child = g_file_get_child (dir, name);
 
       if (type == G_FILE_TYPE_REGULAR && g_str_has_suffix (name, ".test"))
         {
-          Test *test;
+          GdtrTest *test;
           if (!load_test (prefix_root, child, &test, cancellable, error))
             goto out;
           g_ptr_array_add (tests, test);
@@ -283,14 +293,11 @@ gather_all_tests_recurse (GFile         *prefix_root,
 }
 
 static void
-log_test_completion (Test *test,
+log_test_completion (GdtrTest *test,
                      const char *reason)
 {
-  gs_free char *testkey = NULL;
   const char *msgid_value;
-  gs_free char *msgid = NULL;
-  gs_free char *msg = NULL;
-  char *keys[3] = {NULL, NULL, NULL};
+  g_autofree char *msg = NULL;
 
   if (test->state == TEST_STATE_COMPLETE_SUCCESS)
     {
@@ -311,14 +318,10 @@ log_test_completion (Test *test,
   else
     g_assert_not_reached ();
 
-  testkey = g_strconcat ("GDTR_TEST=", test->name, NULL);
-  msgid = g_strconcat ("MESSAGE_ID=", msgid_value, NULL);
-
-  keys[0] = testkey;
-  keys[1] = msgid;
-  keys[2] = NULL;
-
-  gs_log_structured_print (msg, (const char *const*)keys);
+  sd_journal_send ("MESSAGE_ID=%s", msgid_value,
+                   "GDTR_TEST=%s", test->name,
+                   "MESSAGE=%s", msg,
+                   NULL);
 }
 
 static void
@@ -330,18 +333,19 @@ on_test_exited (GObject       *obj,
   GError **error = &local_error;
   GError *tmp_error = NULL;
   int estatus;
-  GSSubprocess *proc = GS_SUBPROCESS (obj);
+  GSubprocess *proc = G_SUBPROCESS (obj);
   GTask *task = G_TASK (user_data);
   GCancellable *cancellable = g_task_get_cancellable (task);
-  Test *test;
+  GdtrTest *test;
   gboolean failed = FALSE;
 
   test = g_task_get_source_object (task);
 
   g_assert (test->state == TEST_STATE_EXECUTING);
 
-  if (!gs_subprocess_wait_finish (proc, result, &estatus, error))
+  if (!g_subprocess_wait (proc, cancellable, error))
     goto out;
+  estatus = g_subprocess_get_status (proc);
   if (!g_spawn_check_exit_status (estatus, &tmp_error))
     {
       if (g_error_matches (tmp_error, G_SPAWN_EXIT_ERROR, 77))
@@ -371,10 +375,10 @@ on_test_exited (GObject       *obj,
   /* Keep around temporaries from failed tests */
   if (!(failed && opt_report_directory))
     {
-      gs_unref_object GFile *test_tmpdir_stamp = g_file_get_child (test->tmpdir, ".testtmp");
+      g_autoptr(GFile) test_tmpdir_stamp = g_file_get_child (test->tmpdir, ".testtmp");
       if (g_file_query_exists (test_tmpdir_stamp, NULL))
         {
-          if (!gs_shutil_rm_rf (test->tmpdir, cancellable, error))
+          if (!rm_rf (test->tmpdir, error))
             goto out;
         }
     }
@@ -386,40 +390,20 @@ on_test_exited (GObject       *obj,
     g_task_return_boolean (task, TRUE);
 }
 
-#ifdef ENABLE_SYSTEMD_JOURNAL
-static void
-setup_test_child (gpointer user_data)
-{
-  Test *test = user_data;
-  int journalfd;
-  
-  journalfd = sd_journal_stream_fd (test->name, LOG_INFO, 0);
-  if (journalfd >= 0)
-    {
-      int ret;
-      do
-        ret = dup2 (journalfd, 1);
-      while (ret == -1 && errno == EINTR);
-      do
-        ret = dup2 (journalfd, 2);
-      while (ret == -1 && errno == EINTR);
-    }
-}
-#endif
-
 static gboolean
 cancel_test (gpointer data)
 {
-  gs_unref_object GSSubprocess *proc = data;
-  gs_subprocess_force_exit (proc);
-  gs_log_structured_print_id_v (ONE_TEST_TIMED_OUT_MSGID,
-                                "Test timed out after %u seconds",
-                                opt_cancel_timeout);
+  GSubprocess*proc = data;
+  g_subprocess_force_exit (proc);
+  sd_journal_send ("MESSAGE_ID=%s" ONE_TEST_TIMED_OUT_MSGID,
+                   "MESSAGE=Test timed out after %u seconds",
+                   opt_cancel_timeout,
+                   NULL);
   return FALSE;
 }
 
 static void
-run_test_async (Test                *test,
+run_test_async (GdtrTest                *test,
                 GCancellable        *cancellable,
                 GAsyncReadyCallback  callback,
                 gpointer             user_data)
@@ -429,12 +413,12 @@ run_test_async (Test                *test,
 
   GError *local_error = NULL;
   GError **error = &local_error;
-  gs_free char *testname = NULL;
-  gs_free char *test_tmpdir = NULL;
-  gs_free char *test_squashed_name = NULL;
-  gs_free char *test_tmpname = NULL;
-  gs_unref_object GSSubprocessContext *proc_context = NULL;
-  gs_unref_object GSSubprocess *proc = NULL;
+  g_autofree char *testname = NULL;
+  g_autofree char *test_tmpdir = NULL;
+  g_autofree char *test_squashed_name = NULL;
+  g_autofree char *test_tmpname = NULL;
+  g_autoptr(GSubprocessLauncher) proc_context = NULL;
+  g_autoptr(GSubprocess) proc = NULL;
   GTask *task;
 
   g_assert (test->state == TEST_STATE_LOADED);
@@ -464,10 +448,15 @@ run_test_async (Test                *test,
     {
       test_tmpdir = g_build_filename (opt_report_directory, test_squashed_name, NULL);
       test->tmpdir = g_file_new_for_path (test_tmpdir);
-      if (!gs_shutil_rm_rf (test->tmpdir, cancellable, error))
+      if (!rm_rf (test->tmpdir, error))
         goto out;
-      if (!gs_file_ensure_directory (test->tmpdir, TRUE, cancellable, error))
-        goto out;
+      if (g_mkdir_with_parents (test_tmpdir, 0755) < 0)
+        {
+          int errsv = errno;
+          g_set_error (error, G_IO_ERROR, g_io_error_from_errno (errsv),
+                       g_strerror (errsv));
+          goto out;
+        }
     }
 
   /* We create a .testtmp stamp file so that tests can *know* for sure
@@ -480,37 +469,32 @@ run_test_async (Test                *test,
    * sure that we're deleting the right tmpdir.
    */ 
   {
-    gs_unref_object GFile *test_tmpdir_stamp = g_file_get_child (test->tmpdir, ".testtmp");
+    g_autoptr(GFile) test_tmpdir_stamp = g_file_get_child (test->tmpdir, ".testtmp");
 
     if (!g_file_replace_contents (test_tmpdir_stamp, "", 0, NULL, FALSE, 0, NULL, cancellable, error))
       goto out;
   }
 
-  proc_context = gs_subprocess_context_new (test->argv);
-  gs_subprocess_context_set_cwd (proc_context, test_tmpdir);
-  gs_subprocess_context_set_environment (proc_context, test->envp);
-  if (!opt_report_directory)
-    {
-#ifdef ENABLE_SYSTEMD_JOURNAL
-      if (gs_stdout_is_journal ())
-        gs_subprocess_context_set_child_setup (proc_context, setup_test_child, test);
-#endif
-    }
-  else
+  GSubprocessFlags flags = G_SUBPROCESS_FLAGS_NONE;
+  if (opt_report_directory)
+    flags |= G_SUBPROCESS_FLAGS_STDERR_MERGE;
+  proc_context = g_subprocess_launcher_new (flags);
+  g_subprocess_launcher_set_cwd (proc_context, test_tmpdir);
+  g_subprocess_launcher_set_environ (proc_context, test->envp);
+  if (opt_report_directory)
     {
       const char *test_output_filename = "output.txt";
-      gs_free char *test_output_path = g_build_filename (test_tmpdir, test_output_filename, NULL);
-      gs_subprocess_context_set_stdout_file_path (proc_context, test_output_path);
-      gs_subprocess_context_set_stderr_disposition (proc_context, GS_SUBPROCESS_STREAM_DISPOSITION_STDERR_MERGE);
+      g_autofree char *test_output_path = g_build_filename (test_tmpdir, test_output_filename, NULL);
+      g_subprocess_launcher_set_stdout_file_path (proc_context, test_output_path);
     }
 
-  proc = gs_subprocess_new (proc_context, cancellable, error);
+  proc = g_subprocess_launcher_spawnv (proc_context, (const char *const*)test->argv, error);
   if (!proc)
     goto out;
 
   test->state = TEST_STATE_EXECUTING;
 
-  gs_subprocess_wait (proc, cancellable, on_test_exited, task);
+  g_subprocess_wait_async (proc, cancellable, on_test_exited, task);
   test->timeout = g_timeout_add_seconds (opt_cancel_timeout, cancel_test, g_object_ref (proc));
 
  out:
@@ -521,7 +505,7 @@ run_test_async (Test                *test,
 }
 
 static gboolean
-run_test_async_finish (Test          *test,
+run_test_async_finish (GdtrTest          *test,
                        GAsyncResult  *result,
                        GError       **error)
 {
@@ -536,7 +520,7 @@ reschedule_tests (GCancellable *cancellable)
          && g_hash_table_size (app->pending_tests) < app->parallel
          && app->test_index < app->tests->len)
     {
-      Test *test = app->tests->pdata[app->test_index];
+      GdtrTest *test = app->tests->pdata[app->test_index];
       g_assert (test->type != TEST_TYPE_UNKNOWN);
       if (test->type == TEST_TYPE_SESSION_EXCLUSIVE)
         {
@@ -561,7 +545,7 @@ on_test_run_complete (GObject      *object,
 {
   GError *local_error = NULL;
   GError **error = &local_error;
-  Test *test = (Test*)object;
+  GdtrTest *test = (GdtrTest*)object;
 
   if (!run_test_async_finish (test, result, error))
     goto out;
@@ -588,23 +572,23 @@ idle_output_status (gpointer data)
 {
   GHashTableIter iter;
   gpointer key, value;
-  GString *status_str = g_string_new ("Executing: ");
+  g_autoptr(GString) status_str = g_string_new ("Executing: ");
   gboolean first = TRUE;
 
   g_hash_table_iter_init (&iter, app->pending_tests);
 
   while (g_hash_table_iter_next (&iter, &key, &value))
     {
-      Test *test = key;
+      GdtrTest *test = key;
       if (!first)
         g_string_append (status_str, ", ");
       else
         first = FALSE;
       g_string_append (status_str, test->name);
     }
-  gs_log_structured_print_id_v (TEST_RUNNING_STATUS_MSGID,
-                                "%s", status_str->str);
-  g_string_free (status_str, TRUE);
+  sd_journal_send ("MESSAGE_ID=%s", TEST_RUNNING_STATUS_MSGID,
+                   "MESSAGE=%s", status_str->str,
+                   NULL);
 
   return TRUE;
 }
@@ -613,15 +597,15 @@ static gint
 cmp_tests (gconstpointer adata,
            gconstpointer bdata)
 {
-  Test **a_pp = (gpointer)adata;
-  Test **b_pp = (gpointer)bdata;
-  Test *a = *a_pp;
-  Test *b = *b_pp;
+  GdtrTest **a_pp = (gpointer)adata;
+  GdtrTest **b_pp = (gpointer)bdata;
+  GdtrTest *a = *a_pp;
+  GdtrTest *b = *b_pp;
 
   if (a->type == b->type)
     {
-      const char *apath = gs_file_get_path_cached (a->path);
-      const char *bpath = gs_file_get_path_cached (b->path);
+      g_autofree char *apath = g_file_get_path (a->path);
+      g_autofree char *bpath = g_file_get_path (b->path);
       return strcmp (apath, bpath);
     }
   else if (a->type < b->type)
@@ -701,10 +685,12 @@ main (int argc, char **argv)
   if (opt_log_msgid)
     {
       const char *eq = strchr (opt_log_msgid, '=');
-      gs_free char *msgid = NULL;
+      g_autofree char *msgid = NULL;
       g_assert (eq);
       msgid = g_strndup (opt_log_msgid, eq - opt_log_msgid);
-      gs_log_structured_print_id_v (msgid, "%s", eq + 1);
+      sd_journal_send ("MESSAGE_ID=%s", msgid,
+                       "MESSAGE=%s", eq + 1,
+                       NULL);
       exit (0);
     }
 
@@ -725,9 +711,9 @@ main (int argc, char **argv)
   for (; *datadirs_iter; datadirs_iter++)
     {
       const char *datadir = *datadirs_iter;
-      gs_unref_object GFile *datadir_f = g_file_new_for_path (datadir);
-      gs_unref_object GFile *prefix_root = g_file_get_child (datadir_f, "installed-tests");
-      
+      g_autoptr(GFile) datadir_f = g_file_new_for_path (datadir);
+      g_autoptr(GFile) prefix_root = g_file_get_child (datadir_f, "installed-tests");
+
       if (!g_file_query_exists (prefix_root, NULL))
         continue;
 
@@ -745,7 +731,7 @@ main (int argc, char **argv)
       while (j < app->tests->len)
         {
           gboolean matches = FALSE;
-          Test *test = app->tests->pdata[j];
+          GdtrTest *test = app->tests->pdata[j];
           for (i = 1; i < argc; i++)
             {
               const char *prefix = argv[i];
@@ -769,8 +755,9 @@ main (int argc, char **argv)
       g_ptr_array_sort (app->tests, cmp_tests);
       for (i = 0; i < app->tests->len; i++)
         {
-          Test *test = app->tests->pdata[i];
-          g_print ("%s (%s)\n", test->name, gs_file_get_path_cached (test->prefix_root));
+          GdtrTest *test = app->tests->pdata[i];
+          g_autofree char *path = g_file_get_path (test->prefix_root);
+          g_print ("%s (%s)\n", test->name, path);
         }
     }
   else
@@ -782,7 +769,7 @@ main (int argc, char **argv)
       reschedule_tests (app->cancellable);
 
       if (opt_status == NULL || strcmp (opt_status, "auto") == 0)
-        show_status = gs_console_get () != NULL;
+        show_status = TRUE;
       else if (strcmp (opt_status, "no") == 0)
         show_status = FALSE;
       else if (strcmp (opt_status, "yes") == 0)
@@ -813,19 +800,20 @@ main (int argc, char **argv)
     {
       g_assert (local_error);
       /* Reusing ONE_TEST_FAILED_MSGID is not quite right, but whatever */
-      gs_log_structured_print_id_v (ONE_TEST_FAILED_MSGID,
-                                    "Caught exception during testing: %s", local_error->message); 
+      sd_journal_send ("MESSAGE_ID=%s", ONE_TEST_FAILED_MSGID,
+                       "MESSAGE=Caught exception during testing: %s", local_error->message,
+                       NULL);
       g_clear_error (&local_error);
     }
   if (!opt_list)
     {
       struct rusage child_rusage;
-      gs_free char *rusage_str = NULL;
+      g_autofree char *rusage_str = NULL;
 
       n_passed = n_skipped = n_failed = 0;
       for (i = 0; i < app->tests->len; i++)
         {
-          Test *test = app->tests->pdata[i];
+          GdtrTest *test = app->tests->pdata[i];
           switch (test->state)
             {
             case TEST_STATE_COMPLETE_SUCCESS:
@@ -850,16 +838,14 @@ main (int argc, char **argv)
                                         child_rusage.ru_maxrss);
         }
 
-      gs_log_structured_print_id_v (TESTS_COMPLETE_MSGID,
-                                    "SUMMARY%s: total=%u; passed=%d; skipped=%d; failed=%d%s",
-                                    ret ? "" : " (incomplete)",
-                                    total_tests, n_passed, n_skipped, n_failed,
-                                    rusage_str != NULL ? rusage_str : "");
-      if (gs_console_get ())
-        {
-          for (i = 0; i < app->failed_test_msgs->len; i++)
-            g_print ("%s\n", (char *) app->failed_test_msgs->pdata[i]);
-        }
+      sd_journal_send ("MESSAGE_ID=%s", TESTS_COMPLETE_MSGID,
+                       "MESSAGE=SUMMARY%s: total=%u; passed=%d; skipped=%d; failed=%d%s",
+                       ret ? "" : " (incomplete)",
+                       total_tests, n_passed, n_skipped, n_failed,
+                       rusage_str != NULL ? rusage_str : "",
+                       NULL);
+      for (i = 0; i < app->failed_test_msgs->len; i++)
+        g_print ("%s\n", (char *) app->failed_test_msgs->pdata[i]);
     }
   g_clear_pointer (&app->pending_tests, g_hash_table_unref);
   g_clear_pointer (&app->tests, g_ptr_array_unref);
