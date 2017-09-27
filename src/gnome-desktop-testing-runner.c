@@ -211,6 +211,7 @@ static gboolean opt_list;
 static int opt_firstroot;
 static int opt_parallel = 1;
 static int opt_cancel_timeout = 5*60;
+static char * opt_log_directory;
 static char * opt_report_directory;
 static char **opt_dirs;
 static char *opt_status;
@@ -221,6 +222,7 @@ static GOptionEntry options[] = {
   { "list", 'l', 0, G_OPTION_ARG_NONE, &opt_list, "List matching tests", NULL },
   { "parallel", 'p', 0, G_OPTION_ARG_INT, &opt_parallel, "Specify parallelization to PROC processors; 0 will be dynamic)", "PROC" },
   { "first-root", 0, 0, G_OPTION_ARG_NONE, &opt_firstroot, "Only use first entry in XDG_DATA_DIRS", "PROC" },
+  { "log-directory", 'L', 0, G_OPTION_ARG_FILENAME, &opt_log_directory, "Create a subdirectory with test logs", "DIR" },
   { "report-directory", 0, 0, G_OPTION_ARG_FILENAME, &opt_report_directory, "Create a subdirectory per failing test in DIR", "DIR" },
   { "status", 0, 0, G_OPTION_ARG_STRING, &opt_status, "Output status information", "yes/no/auto" },
   { "log-msgid", 0, 0, G_OPTION_ARG_STRING, &opt_log_msgid, "Log unique message with id MSGID=MESSAGE", "MSGID" },
@@ -476,7 +478,7 @@ run_test_async (GdtrTest                *test,
   }
 
   GSubprocessFlags flags = G_SUBPROCESS_FLAGS_NONE;
-  if (opt_report_directory)
+  if (opt_report_directory || opt_log_directory)
     flags |= G_SUBPROCESS_FLAGS_STDERR_MERGE;
   proc_context = g_subprocess_launcher_new (flags);
   g_subprocess_launcher_set_cwd (proc_context, test_tmpdir);
@@ -485,6 +487,11 @@ run_test_async (GdtrTest                *test,
     {
       const char *test_output_filename = "output.txt";
       g_autofree char *test_output_path = g_build_filename (test_tmpdir, test_output_filename, NULL);
+      g_subprocess_launcher_set_stdout_file_path (proc_context, test_output_path);
+    }
+  else if (opt_log_directory)
+    {
+      g_autofree char *test_output_path = g_strconcat (opt_log_directory, "/", test_squashed_name, ".txt", NULL);
       g_subprocess_launcher_set_stdout_file_path (proc_context, test_output_path);
     }
 
