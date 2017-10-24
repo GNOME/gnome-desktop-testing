@@ -397,7 +397,7 @@ cancel_test (gpointer data)
 {
   GSubprocess*proc = data;
   g_subprocess_force_exit (proc);
-  sd_journal_send ("MESSAGE_ID=%s" ONE_TEST_TIMED_OUT_MSGID,
+  sd_journal_send ("MESSAGE_ID=%s", ONE_TEST_TIMED_OUT_MSGID,
                    "MESSAGE=Test timed out after %u seconds",
                    opt_cancel_timeout,
                    NULL);
