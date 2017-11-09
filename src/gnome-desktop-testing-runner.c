@@ -30,12 +30,70 @@
 #include <systemd/sd-journal.h>
 
 #define TEST_SKIP_ECODE 77
+
 #define TEST_RUNNING_STATUS_MSGID   "ed6199045dd38bb5321e551d9578f3d9"
 #define TESTS_COMPLETE_MSGID   "4d013788dd704743b826436c951e551d"
 #define ONE_TEST_FAILED_MSGID  "0eee66bf98514369bef9868327a43cf1"
 #define ONE_TEST_SKIPPED_MSGID "ca0b037012363f1898466829ea163e7d"
 #define ONE_TEST_SUCCESS_MSGID "142bf5d40e9742e99d3ac8c1ace83b36"
 #define ONE_TEST_TIMED_OUT_MSGID  "db8f25eab14a4da68ef3ab3ce4b2c0bb"
+
+/* Types of test_log() call */
+typedef enum {
+  TEST_LOG_RUNNING_STATUS,
+  TEST_LOG_COMPLETE,
+  TEST_LOG_ONE_FAILED,
+  TEST_LOG_ONE_SKIPPED,
+  TEST_LOG_ONE_SUCCESS,
+  TEST_LOG_ONE_TIMED_OUT,
+  TEST_LOG_EXCEPTION,
+  TEST_LOG_ARBITRARY,
+} TestLog;
+
+/* Message IDs used for test_log() calls */
+static const char * const test_log_message_ids[] = {
+  [TEST_LOG_RUNNING_STATUS] = TEST_RUNNING_STATUS_MSGID,
+  [TEST_LOG_COMPLETE] = TESTS_COMPLETE_MSGID,
+  [TEST_LOG_ONE_FAILED] = ONE_TEST_FAILED_MSGID,
+  [TEST_LOG_ONE_SKIPPED] = ONE_TEST_SKIPPED_MSGID,
+  [TEST_LOG_ONE_SUCCESS] = ONE_TEST_SUCCESS_MSGID,
+  [TEST_LOG_ONE_TIMED_OUT] = ONE_TEST_TIMED_OUT_MSGID,
+  /* Reusing ONE_TEST_FAILED_MSGID is not quite right, but whatever */
+  [TEST_LOG_EXCEPTION] = ONE_TEST_FAILED_MSGID,
+  /* Special-cased: the "test name" is really the message ID */
+  [TEST_LOG_ARBITRARY] = NULL,
+};
+
+static void
+test_log (TestLog what,
+          const char *test_name,
+          const char *format,
+          ...)
+{
+  const char *msgid = test_log_message_ids[what];
+  g_autofree char *message = NULL;
+  va_list ap;
+
+  if (what == TEST_LOG_ARBITRARY)
+    {
+      msgid = test_name;
+      test_name = NULL;
+    }
+
+  va_start (ap, format);
+  message = g_strdup_vprintf (format, ap);
+  va_end (ap);
+
+  if (test_name)
+    sd_journal_send ("MESSAGE_ID=%s", msgid,
+                     "GDTR_TEST=%s", test_name,
+                     "MESSAGE=%s", message,
+                     NULL);
+  else
+    sd_journal_send ("MESSAGE_ID=%s", msgid,
+                     "MESSAGE=%s", message,
+                     NULL);
+}
 
 static gboolean
 rm_rf (GFile *path, GError **error)
@@ -299,31 +357,25 @@ log_test_completion (GdtrTest *test,
                      const char *reason)
 {
   const char *msgid_value;
-  g_autofree char *msg = NULL;
 
   if (test->state == TEST_STATE_COMPLETE_SUCCESS)
     {
-      msgid_value = ONE_TEST_SUCCESS_MSGID;
-      msg = g_strconcat ("PASS: ", test->name, NULL);
+      test_log (TEST_LOG_ONE_SUCCESS, test->name, "PASS: %s", test->name);
     }
   else if (test->state == TEST_STATE_COMPLETE_FAILED)
     {
-      msgid_value = ONE_TEST_FAILED_MSGID;
-      msg = g_strconcat ("FAIL: ", test->name, " (", reason, ")", NULL);
+      g_autofree char *msg = g_strconcat ("FAIL: ", test->name, " (", reason,
+                                          ")", NULL);
+
+      test_log (TEST_LOG_ONE_FAILED, test->name, "%s", msg);
       g_ptr_array_add (app->failed_test_msgs, g_strdup (msg));
     }
   else if (test->state == TEST_STATE_COMPLETE_SKIPPED)
     {
-      msgid_value = ONE_TEST_SKIPPED_MSGID;
-      msg = g_strconcat ("SKIP: ", test->name, NULL);
+      test_log (TEST_LOG_ONE_SKIPPED, test->name, "SKIP: %s", test->name);
     }
   else
     g_assert_not_reached ();
-
-  sd_journal_send ("MESSAGE_ID=%s", msgid_value,
-                   "GDTR_TEST=%s", test->name,
-                   "MESSAGE=%s", msg,
-                   NULL);
 }
 
 static void
@@ -397,10 +449,8 @@ cancel_test (gpointer data)
 {
   GSubprocess*proc = data;
   g_subprocess_force_exit (proc);
-  sd_journal_send ("MESSAGE_ID=%s", ONE_TEST_TIMED_OUT_MSGID,
-                   "MESSAGE=Test timed out after %u seconds",
-                   opt_cancel_timeout,
-                   NULL);
+  test_log (TEST_LOG_ONE_TIMED_OUT, NULL, "Test timed out after %u seconds",
+       opt_cancel_timeout);
   return FALSE;
 }
 
@@ -592,10 +642,8 @@ idle_output_status (gpointer data)
         first = FALSE;
       g_string_append (status_str, test->name);
     }
-  sd_journal_send ("MESSAGE_ID=%s", TEST_RUNNING_STATUS_MSGID,
-                   "MESSAGE=%s", status_str->str,
-                   NULL);
 
+  test_log (TEST_LOG_RUNNING_STATUS, NULL, "%s", status_str->str);
   return TRUE;
 }
 
@@ -694,9 +742,8 @@ main (int argc, char **argv)
       g_autofree char *msgid = NULL;
       g_assert (eq);
       msgid = g_strndup (opt_log_msgid, eq - opt_log_msgid);
-      sd_journal_send ("MESSAGE_ID=%s", msgid,
-                       "MESSAGE=%s", eq + 1,
-                       NULL);
+
+      test_log (TEST_LOG_ARBITRARY, msgid, "%s", eq + 1);
       exit (0);
     }
 
@@ -805,10 +852,9 @@ main (int argc, char **argv)
   if (!ret)
     {
       g_assert (local_error);
-      /* Reusing ONE_TEST_FAILED_MSGID is not quite right, but whatever */
-      sd_journal_send ("MESSAGE_ID=%s", ONE_TEST_FAILED_MSGID,
-                       "MESSAGE=Caught exception during testing: %s", local_error->message,
-                       NULL);
+      test_log (TEST_LOG_EXCEPTION, NULL,
+                "Caught exception during testing: %s",
+                local_error->message);
       g_clear_error (&local_error);
     }
   if (!opt_list)
@@ -844,12 +890,13 @@ main (int argc, char **argv)
                                         child_rusage.ru_maxrss);
         }
 
-      sd_journal_send ("MESSAGE_ID=%s", TESTS_COMPLETE_MSGID,
-                       "MESSAGE=SUMMARY%s: total=%u; passed=%d; skipped=%d; failed=%d%s",
-                       ret ? "" : " (incomplete)",
-                       total_tests, n_passed, n_skipped, n_failed,
-                       rusage_str != NULL ? rusage_str : "",
-                       NULL);
+      test_log (TEST_LOG_COMPLETE, NULL,
+                "SUMMARY%s: total=%u; passed=%d; skipped=%d; failed=%d%s",
+                ret ? "" : " (incomplete)",
+                total_tests, n_passed, n_skipped, n_failed,
+                rusage_str != NULL ? rusage_str : "",
+                NULL);
+
       for (i = 0; i < app->failed_test_msgs->len; i++)
         g_print ("%s\n", (char *) app->failed_test_msgs->pdata[i]);
     }
