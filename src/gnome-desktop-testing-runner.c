@@ -1,6 +1,7 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*-
  *
  * Copyright (C) 2011,2013 Colin Walters <walters@verbum.org>
+ * Copyright (C) 2009 Codethink Limited
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -22,6 +23,9 @@
 #include "config.h"
 
 #include <gio/gio.h>
+
+#include <unistd.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -68,6 +72,7 @@ static const char * const test_log_message_ids[] = {
 };
 
 static gboolean opt_quiet = FALSE;
+static gboolean opt_tap = FALSE;
 
 static void
 test_log (TestLog what,
@@ -105,11 +110,107 @@ test_log (TestLog what,
     g_printerr ("%s: %s\n", msgid, message);
 #endif
 
-  if (!opt_quiet)
+  if (opt_tap)
+    {
+      switch (what)
+        {
+          default:
+            /* fall through */
+          case TEST_LOG_RUNNING_STATUS:
+            /* fall through */
+          case TEST_LOG_COMPLETE:
+            g_print ("# %s\n", message);
+            break;
+
+          case TEST_LOG_ONE_FAILED:
+            g_print ("# %s\n", message);
+            g_print ("not ok - %s\n", test_name);
+            break;
+
+          case TEST_LOG_ONE_SKIPPED:
+            g_print ("ok # SKIP - %s\n", test_name);
+            break;
+
+          case TEST_LOG_ONE_SUCCESS:
+            g_print ("ok - %s\n", test_name);
+            break;
+
+          case TEST_LOG_ONE_TIMED_OUT:
+            g_print ("not ok - %s\n", message);
+            break;
+
+          case TEST_LOG_EXCEPTION:
+            g_print ("Bail out! %s\n", message);
+            break;
+
+          case TEST_LOG_ARBITRARY:
+            /* do nothing, just print to the Journal */
+            break;
+        }
+    }
+  else if (!opt_quiet)
     {
       if (what != TEST_LOG_ARBITRARY)
         g_print ("%s\n", message);
     }
+}
+
+/* Taken from gio/gunixfdlist.c */
+static int
+dup_close_on_exec_fd (gint     fd,
+                      GError **error)
+{
+  gint new_fd;
+  gint s;
+
+#ifdef F_DUPFD_CLOEXEC
+  do
+    new_fd = fcntl (fd, F_DUPFD_CLOEXEC, 0l);
+  while (new_fd < 0 && (errno == EINTR));
+
+  if (new_fd >= 0)
+    return new_fd;
+
+  /* if that didn't work (new libc/old kernel?), try it the other way. */
+#endif
+
+  do
+    new_fd = dup (fd);
+  while (new_fd < 0 && (errno == EINTR));
+
+  if (new_fd < 0)
+    {
+      int saved_errno = errno;
+
+      g_set_error (error, G_IO_ERROR,
+                   g_io_error_from_errno (saved_errno),
+                   "dup: %s", g_strerror (saved_errno));
+
+      return -1;
+    }
+
+  do
+    {
+      s = fcntl (new_fd, F_GETFD);
+
+      if (s >= 0)
+        s = fcntl (new_fd, F_SETFD, (long) (s | FD_CLOEXEC));
+    }
+  while (s < 0 && (errno == EINTR));
+
+  if (s < 0)
+    {
+      int saved_errno = errno;
+
+      g_set_error (error, G_IO_ERROR,
+                   g_io_error_from_errno (saved_errno),
+                   "fcntl: %s", g_strerror (saved_errno));
+      close (new_fd);
+
+      return -1;
+    }
+
+  return new_fd;
 }
 
 static gboolean
@@ -303,6 +404,7 @@ static GOptionEntry options[] = {
   { "log-msgid", 0, 0, G_OPTION_ARG_STRING, &opt_log_msgid, "Log unique message with id MSGID=MESSAGE", "MSGID" },
   { "timeout", 't', 0, G_OPTION_ARG_INT, &opt_cancel_timeout, "Cancel test after timeout seconds; defaults to 5 minutes", "TIMEOUT" },
   { "quiet", 0, 0, G_OPTION_ARG_NONE, &opt_quiet, "Don't output test results", NULL },
+  { "tap", 0, 0, G_OPTION_ARG_NONE, &opt_tap, "Output test results as TAP", NULL },
   { NULL }
 };
 
@@ -501,7 +603,7 @@ run_test_async (GdtrTest                *test,
   
   task = g_task_new (test, cancellable, callback, user_data); 
 
-  g_print ("Running test: %s\n", test->name);
+  g_print ("%sRunning test: %s\n", opt_tap ? "# " : "", test->name);
 
   test_squashed_name = g_regex_replace_literal (slash_regex, test->name, -1,
                                                 0, "_", 0, NULL);
@@ -548,6 +650,20 @@ run_test_async (GdtrTest                *test,
   if (opt_report_directory || opt_log_directory)
     flags |= G_SUBPROCESS_FLAGS_STDERR_MERGE;
   proc_context = g_subprocess_launcher_new (flags);
+
+  if (opt_tap && !(opt_report_directory || opt_log_directory))
+    {
+      /* We can't put the test's output on our stdout, or it'd be
+       * misinterpreted as our structured TAP output. Put it on our
+       * stderr instead */
+      int copy_of_stderr;
+
+      copy_of_stderr = dup_close_on_exec_fd (STDERR_FILENO, error);
+      if (copy_of_stderr < 0)
+        goto out;
+      g_subprocess_launcher_take_stdout_fd (proc_context, copy_of_stderr);
+    }
+
   g_subprocess_launcher_set_cwd (proc_context, test_tmpdir);
   g_subprocess_launcher_set_environ (proc_context, test->envp);
   if (opt_report_directory)
@@ -840,6 +956,14 @@ main (int argc, char **argv)
     {
       gboolean show_status;
 
+      if (opt_tap)
+        {
+          if (total_tests == 0)
+            g_print ("1..0 # SKIP - nothing to do\n");
+          else
+            g_print ("1..%d\n", total_tests);
+        }
+
       fisher_yates_shuffle (app->tests);
 
       reschedule_tests (app->cancellable);
@@ -921,7 +1045,7 @@ main (int argc, char **argv)
                 NULL);
 
       for (i = 0; i < app->failed_test_msgs->len; i++)
-        g_print ("%s\n", (char *) app->failed_test_msgs->pdata[i]);
+        g_print ("%s%s\n", opt_tap ? "# " : "", (char *) app->failed_test_msgs->pdata[i]);
     }
   g_clear_pointer (&app->pending_tests, g_hash_table_unref);
   g_clear_pointer (&app->tests, g_ptr_array_unref);
