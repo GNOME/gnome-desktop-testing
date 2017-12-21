@@ -27,7 +27,10 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+
+#ifdef HAVE_SYSTEMD
 #include <systemd/sd-journal.h>
+#endif
 
 #define TEST_SKIP_ECODE 77
 
@@ -86,6 +89,7 @@ test_log (TestLog what,
   message = g_strdup_vprintf (format, ap);
   va_end (ap);
 
+#ifdef HAVE_SYSTEMD
   if (test_name)
     sd_journal_send ("MESSAGE_ID=%s", msgid,
                      "GDTR_TEST=%s", test_name,
@@ -95,6 +99,11 @@ test_log (TestLog what,
     sd_journal_send ("MESSAGE_ID=%s", msgid,
                      "MESSAGE=%s", message,
                      NULL);
+#else
+  /* we can't log this to the Journal, so do *something* with it */
+  if (what == TEST_LOG_ARBITRARY)
+    g_printerr ("%s: %s\n", msgid, message);
+#endif
 
   if (!opt_quiet)
     {

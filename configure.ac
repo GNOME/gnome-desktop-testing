@@ -27,7 +27,9 @@ AC_SUBST(WARN_CFLAGS)
 LT_PREREQ([2.2.4])
 LT_INIT([disable-static])
 
-PKG_CHECK_MODULES(BUILDDEP_GDT, [gio-unix-2.0 >= 2.34.0 libsystemd])
+PKG_CHECK_MODULES(BUILDDEP_GDT, [gio-unix-2.0 >= 2.34.0])
+PKG_CHECK_MODULES([SYSTEMD], [libsystemd], [have_systemd=yes], [have_systemd=no])
+AS_IF([test "x$have_systemd" = xyes], [AC_DEFINE([HAVE_SYSTEMD], [1], [Define if you have libsystemd])])
 GIO_UNIX_CFLAGS="$GIO_UNIX_CFLAGS -DGLIB_VERSION_MIN_REQUIRED=GLIB_VERSION_2_36 -DGLIB_VERSION_MAX_ALLOWED=GLIB_VERSION_2_36"
 
 AC_CONFIG_FILES([
