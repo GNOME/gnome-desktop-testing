@@ -64,6 +64,8 @@ static const char * const test_log_message_ids[] = {
   [TEST_LOG_ARBITRARY] = NULL,
 };
 
+static gboolean opt_quiet = FALSE;
+
 static void
 test_log (TestLog what,
           const char *test_name,
@@ -93,6 +95,12 @@ test_log (TestLog what,
     sd_journal_send ("MESSAGE_ID=%s", msgid,
                      "MESSAGE=%s", message,
                      NULL);
+
+  if (!opt_quiet)
+    {
+      if (what != TEST_LOG_ARBITRARY)
+        g_print ("%s\n", message);
+    }
 }
 
 static gboolean
@@ -285,6 +293,7 @@ static GOptionEntry options[] = {
   { "status", 0, 0, G_OPTION_ARG_STRING, &opt_status, "Output status information", "yes/no/auto" },
   { "log-msgid", 0, 0, G_OPTION_ARG_STRING, &opt_log_msgid, "Log unique message with id MSGID=MESSAGE", "MSGID" },
   { "timeout", 't', 0, G_OPTION_ARG_INT, &opt_cancel_timeout, "Cancel test after timeout seconds; defaults to 5 minutes", "TIMEOUT" },
+  { "quiet", 0, 0, G_OPTION_ARG_NONE, &opt_quiet, "Don't output test results", NULL },
   { NULL }
 };
 
@@ -726,6 +735,11 @@ main (int argc, char **argv)
 
   /* avoid gvfs (http://bugzilla.gnome.org/show_bug.cgi?id=526454) */
   g_setenv ("GIO_USE_VFS", "local", TRUE);
+
+  /* There's no point in logging to the Journal every time we log to
+   * the Journal */
+  if (g_log_writer_is_journald (STDOUT_FILENO))
+    opt_quiet = TRUE;
 
   context = g_option_context_new ("[PREFIX...] - Run installed tests");
   g_option_context_add_main_entries (context, options, NULL);
