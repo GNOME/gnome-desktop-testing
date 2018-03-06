@@ -415,7 +415,6 @@ run_test_async (GdtrTest                *test,
 
   GError *local_error = NULL;
   GError **error = &local_error;
-  g_autofree char *testname = NULL;
   g_autofree char *test_tmpdir = NULL;
   g_autofree char *test_squashed_name = NULL;
   g_autofree char *test_tmpname = NULL;
@@ -456,7 +455,7 @@ run_test_async (GdtrTest                *test,
         {
           int errsv = errno;
           g_set_error (error, G_IO_ERROR, g_io_error_from_errno (errsv),
-                       g_strerror (errsv));
+                       "%s", g_strerror (errsv));
           goto out;
         }
     }
