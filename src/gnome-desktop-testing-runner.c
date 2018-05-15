@@ -476,8 +476,6 @@ static void
 log_test_completion (GdtrTest *test,
                      const char *reason)
 {
-  const char *msgid_value;
-
   if (test->state == TEST_STATE_COMPLETE_SUCCESS)
     {
       test_log (TEST_LOG_ONE_SUCCESS, test->name, "PASS: %s", test->name);
