@@ -1,5 +1,5 @@
 AC_PREREQ([2.63])
-AC_INIT([gnome-desktop-testing], [2016.1], [walters@verbum.org], [gnome-desktop-testing], [https://wiki.gnome.org/Initiatives/GnomeGoals/InstalledTests/])
+AC_INIT([gnome-desktop-testing], [2018.1], [walters@verbum.org], [gnome-desktop-testing], [https://wiki.gnome.org/Initiatives/GnomeGoals/InstalledTests/])
 AC_CONFIG_HEADER([config.h])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR([build-aux])
