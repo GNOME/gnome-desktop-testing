@@ -40,7 +40,7 @@ include Makefile-tests.am
 install-data-hook: $(INSTALL_DATA_HOOKS)
 
 install-exec-hook:
-	ln -s gnome-desktop-testing-runner $(DESTDIR)$(bindir)/ginsttest-runner
+	ln -sf gnome-desktop-testing-runner $(DESTDIR)$(bindir)/ginsttest-runner
 
 release-tag:
 	git tag -m "Release $(VERSION)" v$(VERSION)
