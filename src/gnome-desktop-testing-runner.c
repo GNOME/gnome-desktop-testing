@@ -855,6 +855,9 @@ main (int argc, char **argv)
 
   memset (&appstruct, 0, sizeof (appstruct));
   app = &appstruct;
+  app->pending_tests = g_hash_table_new (NULL, NULL);
+  app->tests = g_ptr_array_new_with_free_func ((GDestroyNotify)g_object_unref);
+  app->failed_test_msgs = g_ptr_array_new_with_free_func ((GDestroyNotify)g_free);
 
   /* avoid gvfs (http://bugzilla.gnome.org/show_bug.cgi?id=526454) */
   g_setenv ("GIO_USE_VFS", "local", TRUE);
@@ -888,10 +891,6 @@ main (int argc, char **argv)
     app->parallel = g_get_num_processors ();
   else
     app->parallel = opt_parallel;
-
-  app->pending_tests = g_hash_table_new (NULL, NULL);
-  app->tests = g_ptr_array_new_with_free_func ((GDestroyNotify)g_object_unref);
-  app->failed_test_msgs = g_ptr_array_new_with_free_func ((GDestroyNotify)g_free);
 
   if (opt_dirs)
     datadirs_iter = (const char *const*) opt_dirs;
