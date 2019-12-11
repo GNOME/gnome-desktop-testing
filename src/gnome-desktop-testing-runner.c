@@ -628,6 +628,9 @@ run_test_async (GdtrTest                *test,
         }
     }
 
+  if (opt_log_directory)
+    g_mkdir_with_parents (opt_log_directory, 0755);
+
   /* We create a .testtmp stamp file so that tests can *know* for sure
    * they're in a temporary directory.  This is used by at least the
    * OSTree tests as protection against someone running a test script
