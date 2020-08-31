@@ -35,12 +35,17 @@ privlib_LTLIBRARIES =
 privlib_DATA =
 INSTALL_DATA_HOOKS =
 
+dist_man1_MANS = gnome-desktop-testing-runner.1
+
 include Makefile-tests.am
 
 install-data-hook: $(INSTALL_DATA_HOOKS)
 
 install-exec-hook:
+	install -d $(DESTDIR)$(bindir)
+	install -d $(DESTDIR)$(man1dir)
 	ln -sf gnome-desktop-testing-runner $(DESTDIR)$(bindir)/ginsttest-runner
+	ln -sf gnome-desktop-testing-runner.1 $(DESTDIR)$(man1dir)/ginsttest-runner.1
 
 release-tag:
 	git tag -m "Release $(VERSION)" v$(VERSION)
