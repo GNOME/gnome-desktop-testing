@@ -854,7 +854,9 @@ main (int argc, char **argv)
   GOptionContext *context;
   TestRunnerApp appstruct;
   const char *const *datadirs_iter;
-  int n_passed, n_skipped, n_failed;
+  int n_passed = 0;
+  int n_skipped = 0;
+  int n_failed = 0;
 
   memset (&appstruct, 0, sizeof (appstruct));
   app = &appstruct;
@@ -1009,7 +1011,6 @@ main (int argc, char **argv)
       struct rusage child_rusage;
       g_autofree char *rusage_str = NULL;
 
-      n_passed = n_skipped = n_failed = 0;
       for (i = 0; i < app->tests->len; i++)
         {
           GdtrTest *test = app->tests->pdata[i];
