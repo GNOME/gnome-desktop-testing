@@ -394,10 +394,10 @@ static char *opt_status;
 static char *opt_log_msgid;
 
 static GOptionEntry options[] = {
-  { "dir", 'd', 0, G_OPTION_ARG_STRING_ARRAY, &opt_dirs, "Only run tests from these dirs (default: all system data dirs)", NULL },
+  { "dir", 'd', 0, G_OPTION_ARG_STRING_ARRAY, &opt_dirs, "Only run tests from these dirs (default: all system data dirs)", "DIR" },
   { "list", 'l', 0, G_OPTION_ARG_NONE, &opt_list, "List matching tests", NULL },
   { "parallel", 'p', 0, G_OPTION_ARG_INT, &opt_parallel, "Specify parallelization to PROC processors; 0 will be dynamic)", "PROC" },
-  { "first-root", 0, 0, G_OPTION_ARG_NONE, &opt_firstroot, "Only use first entry in XDG_DATA_DIRS", "PROC" },
+  { "first-root", 0, 0, G_OPTION_ARG_NONE, &opt_firstroot, "Only use first entry in XDG_DATA_DIRS", NULL },
   { "log-directory", 'L', 0, G_OPTION_ARG_FILENAME, &opt_log_directory, "Create a subdirectory with test logs", "DIR" },
   { "report-directory", 0, 0, G_OPTION_ARG_FILENAME, &opt_report_directory, "Create a subdirectory per failing test in DIR", "DIR" },
   { "status", 0, 0, G_OPTION_ARG_STRING, &opt_status, "Output status information", "yes/no/auto" },
