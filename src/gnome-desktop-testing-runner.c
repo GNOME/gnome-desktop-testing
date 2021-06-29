@@ -1025,6 +1025,9 @@ main (int argc, char **argv)
             case TEST_STATE_COMPLETE_FAILED:
               n_failed++;
               break;
+            case TEST_STATE_UNLOADED:
+            case TEST_STATE_LOADED:
+            case TEST_STATE_EXECUTING:
             default:
               break;
             }
