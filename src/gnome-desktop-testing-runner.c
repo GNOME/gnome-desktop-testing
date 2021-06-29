@@ -589,6 +589,7 @@ run_test_async (GdtrTest                *test,
   g_autoptr(GSubprocessLauncher) proc_context = NULL;
   g_autoptr(GSubprocess) proc = NULL;
   GTask *task;
+  GSubprocessFlags flags = G_SUBPROCESS_FLAGS_NONE;
 
   g_assert (test->state == TEST_STATE_LOADED);
 
@@ -647,7 +648,6 @@ run_test_async (GdtrTest                *test,
       goto out;
   }
 
-  GSubprocessFlags flags = G_SUBPROCESS_FLAGS_NONE;
   if (opt_report_directory || opt_log_directory)
     flags |= G_SUBPROCESS_FLAGS_STDERR_MERGE;
   proc_context = g_subprocess_launcher_new (flags);
