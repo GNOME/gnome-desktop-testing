@@ -18,7 +18,7 @@ if test "x$GCC" = "xyes"; then
 		-Werror=pointer-arith -Werror=init-self -Werror=format=2 \
 		-Werror=format-security \
 		-Werror=missing-include-dirs -Werror=aggregate-return \
-		-Werror=switch-default -Wswitch-enum
+		-Werror=switch-default -Wswitch-enum -Wsign-compare \
 		-Werror=declaration-after-statement"
 fi
 changequote([,])dnl

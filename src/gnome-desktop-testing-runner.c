@@ -235,8 +235,8 @@ typedef struct {
   GPtrArray *tests;
   GPtrArray *failed_test_msgs;
 
-  int parallel;
-  int test_index;
+  unsigned int parallel;
+  unsigned int test_index;
 
   gboolean running_exclusive_test;
 } TestRunnerApp;
@@ -830,7 +830,7 @@ timeval_to_ms (const struct timeval *tv)
       tv->tv_usec == -1L)
     return -1;
 
-  if (tv->tv_sec > (G_MAXUINT64 - tv->tv_usec) / G_USEC_PER_SEC)
+  if (tv->tv_sec > (G_MAXINT64 - tv->tv_usec) / G_USEC_PER_SEC)
     return -1;
 
   return ((gint64) tv->tv_sec) * G_USEC_PER_SEC + tv->tv_usec;
@@ -850,7 +850,7 @@ main (int argc, char **argv)
   GError *local_error = NULL;
   GError **error = &local_error;
   guint total_tests = 0;
-  int i, j;
+  unsigned int i, j;
   GOptionContext *context;
   TestRunnerApp appstruct;
   const char *const *datadirs_iter;
@@ -926,7 +926,7 @@ main (int argc, char **argv)
         {
           gboolean matches = FALSE;
           GdtrTest *test = app->tests->pdata[j];
-          for (i = 1; i < argc; i++)
+          for (i = 1; i < (unsigned int) argc; i++)
             {
               const char *prefix = argv[i];
               if (g_str_has_prefix (test->name, prefix))
