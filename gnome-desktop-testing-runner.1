@@ -1,0 +1,197 @@
+.TH GNOME-DESKTOP-TESTING-RUNNER 1
+
+.SH NAME
+gnome-desktop-testing-runner, ginsttest-runner \- run "as-installed" tests
+
+.SH SYNOPSIS
+.B gnome-desktop-testing-runner
+[\fB--dir=\fIDIR\fR]
+[\fB--first-root\fR]
+[\fB--list\fR]
+[\fB--log-directory=\fIDIR\fR]
+[\fB--parallel=\fIPROC\fR]
+[\fB--quiet\fR]
+[\fB--report-directory=\fIDIR\fR]
+[\fB--status=yes\fR|\fBno\fR|\fBauto\fR]
+[\fB--tap\fR]
+[\fB--timeout=\fISECONDS\fR]
+\fIPREFIX\fR [\fIPREFIX\fR...]
+
+.B gnome-desktop-testing-runner
+\fB--log-msgid\fR=\fIMSGID\fB=\fIMESSAGE\fR
+
+.B ginsttest-runner
+\fIOPTIONS\fR
+
+.SH DESCRIPTION
+
+.BR gnome-desktop-testing-runner ,
+also known as
+.BR ginsttest-runner ,
+runs "as-installed" tests. These tests are discovered using metadata in
+files named \fBinstalled-tests/**/*.test\fR, and are intended to check
+that a library or program is functioning correctly and has been installed
+correctly by a system integrator such as an OS distributor or system
+administrator.
+
+.PP
+Tests in this format are typically provided by GNOME-related libraries,
+but the concept, format and tools are not GNOME-specific and can be used
+by any software.
+
+.SH OPTIONS
+
+.TP
+\fB--dir=\fIDIR\fR, \fB-d\fR \fIDIR\fR
+Look for test metadata in the \fBinstalled-tests\fR subdirectory of
+\fIDIR\fR, instead of using \fB$XDG_DATA_DIRS\fR. If repeated, each \fIDIR\fR
+is searched in order.
+
+.TP
+\fB--first-root\fR
+Stop after a directory that contains \fBinstalled-tests\fR has been
+encountered.
+
+.TP
+\fB--list\fR, \fB-l\fR
+Don't run any tests. Instead, list what would have been run on standard
+output, one per line, in the format \fINAME\fB (\fIPATH\fB)\fR.
+
+.TP
+\fB--log-directory=\fIDIR\fR, \fB-L\fR \fIDIR\fR
+Write the output of each test to a file \fIDIR\fB/\fINAME\fB.txt\fR.
+
+.TP
+\fB--log-msgid=\fIMSGID\fB=\fIMESSAGE\fR
+Don't run any tests. Instead, emit a log message to the systemd Journal
+with the unique machine-readable message ID \fIMSGID\fR and the
+human-readable message \fIMESSAGE\fR. This can be used to mark important
+points in the test log from a test written in a language where direct
+access to the Journal is awkward, such as shell script or JavaScript.
+
+.TP
+\fB--parallel=\fIPROC\fR, \fB-p\fR \fIPROC\fR
+Run up to \fIPROC\fR tests in parallel. The default is 1, meaning do not
+run tests in parallel. If \fIPROC\fR is 0, detect the number of CPUs and
+run that many tests in parallel.
+
+.TP
+\fB--quiet\fR
+Don't output test results, just log them to the systemd Journal
+if supported.
+
+.TP
+\fB--report-directory=\fIDIR\fR
+Run each test with \fIDIR\fB/\fINAME\fR as its current working directory,
+and write its output to a file \fIDIR\fB/\fINAME\fB/output.txt\fR.
+If the test succeeds, the directory is deleted. If the test fails, the
+directory is kept for analysis, including any temporary files or logs
+that the test itself might have written there.
+
+.TP
+\fB--status=yes\fR|\fBno\fR|\fBauto\fR
+Output a status message every few seconds if a test takes a significant
+time to run.
+
+.TP
+\fB--tap\fR
+Output machine-readable test results on standard output, in the format
+specified by TAP (the
+.UR https://testanything.org/
+Test Anything Protocol
+.UE
+originally used by Perl's test suite).
+
+.TP
+\fB--timeout=\fISECONDS\fR, \fB-t\fR \fISECONDS\fR
+If a test takes longer than \fISECONDS\fR seconds to run, terminate it.
+The default is 5 minutes (300 seconds).
+
+.TP
+\fIPREFIX\fR [\fIPREFIX\fR...]
+Only list or run tests that match one of these prefixes, relative to the
+.B installed-tests
+directory.
+
+.SH EXIT STATUS
+
+.TP
+0
+All tests were successful, or \fB--list\fR or \fB--log-msgid\fR was
+successful
+
+.TP
+1
+An error occurred during options parsing, setup or testing
+
+.TP
+2
+The tests were run, and least one failed
+
+.SH ENVIRONMENT
+
+.TP
+XDG_DATA_DIRS
+Used to discover tests if \fB--dir\fR, \fB-d\fR is not specified.
+
+.SH FILES
+
+.TP
+/usr/local/share/installed-tests/**/*.test
+Conventional location for metadata describing tests installed by
+locally-installed software.
+
+.TP
+/usr/share/installed-tests/**/*.test
+Conventional location for metadata describing tests installed by the
+operating system packages.
+
+.TP
+/usr/local/libexec/installed-tests/**, /usr/libexec/installed-tests/**
+Conventional location for test executables and the data files they
+require (although this is not required, and they can be installed in any
+convenient location).
+
+.TP
+.RB ./.testtmp
+Each test will be invoked in a temporary directory containing only this
+file. Tests can use this to avoid overwriting important files if run
+without using
+.BR gnome-desktop-testing-runner .
+
+.SH EXAMPLE
+
+To run the tests from the
+.B json-glib
+library:
+.nf
+.RS
+ginsttest-runner json-glib-1.0/
+.RE
+.fi
+
+.PP
+To run the tests from the
+.BR dbus ,
+.B glib
+and
+.B json-glib
+libraries, with up to one process per CPU, producing machine-readable
+output and storing results of any failed tests in a directory:
+.nf
+.RS
+ginsttest-runner \\
+    --parallel=0 \\
+    --report-directory=artifacts \\
+    --tap \\
+    dbus/ glib/ json-glib-1.0/
+.RE
+.fi
+
+.SH SEE ALSO
+.UR https://wiki.gnome.org/Initiatives/GnomeGoals/InstalledTests
+GNOME Goal: Installed Tests
+.UE ,
+.UR https://testanything.org/
+Test Anything Protocol
+.UE
