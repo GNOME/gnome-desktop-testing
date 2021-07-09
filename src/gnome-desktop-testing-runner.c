@@ -74,7 +74,7 @@ static const char * const test_log_message_ids[] = {
 static gboolean opt_quiet = FALSE;
 static gboolean opt_tap = FALSE;
 
-static void
+static void G_GNUC_PRINTF (3, 0)
 test_log (TestLog what,
           const char *test_name,
           const char *format,
