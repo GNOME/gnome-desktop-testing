@@ -59,7 +59,7 @@ endif
 
 include_dirs = include_directories('.')
 
-glib_req_version = '2.50'
+glib_req_version = '2.54'
 gio_unix_dep = dependency('gio-unix-2.0', version : '>=' + glib_req_version)
 libsystemd_dep = dependency('libsystemd', required : get_option('systemd'))
 
