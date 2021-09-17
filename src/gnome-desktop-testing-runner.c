@@ -396,10 +396,34 @@ static char **opt_dirs;
 static char *opt_status;
 static char *opt_log_msgid;
 
+static gboolean
+parse_parallel (const char  *option_name,
+                const char  *value,
+                gpointer     data,
+                GError     **error)
+{
+  if (value == NULL)
+    {
+      opt_parallel = 0;
+    }
+  else
+    {
+      guint64 num;
+
+      if (!g_ascii_string_to_unsigned (value, 10, 0, 65536, &num, error))
+        return FALSE;
+
+      opt_parallel = (int) num;
+    }
+
+  return TRUE;
+}
+
 static GOptionEntry options[] = {
   { "dir", 'd', 0, G_OPTION_ARG_STRING_ARRAY, &opt_dirs, "Only run tests from these dirs (default: all system data dirs)", "DIR" },
   { "list", 'l', 0, G_OPTION_ARG_NONE, &opt_list, "List matching tests", NULL },
-  { "parallel", 'p', 0, G_OPTION_ARG_INT, &opt_parallel, "Specify parallelization to PROC processors; 0 will be dynamic)", "PROC" },
+  { "parallel", 'p', G_OPTION_FLAG_OPTIONAL_ARG, G_OPTION_ARG_CALLBACK, parse_parallel,
+    "Specify parallelization to PROC processors; omit the argument for dynamic)", "PROC" },
   { "first-root", 0, 0, G_OPTION_ARG_NONE, &opt_firstroot, "Only use first entry in XDG_DATA_DIRS", NULL },
   { "log-directory", 'L', 0, G_OPTION_ARG_FILENAME, &opt_log_directory, "Create a subdirectory with test logs", "DIR" },
   { "report-directory", 0, 0, G_OPTION_ARG_FILENAME, &opt_report_directory, "Create a subdirectory per failing test in DIR", "DIR" },
