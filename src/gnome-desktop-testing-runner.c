@@ -24,6 +24,7 @@
 
 #include <gio/gio.h>
 
+#include <locale.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -863,6 +864,8 @@ main (int argc, char **argv)
   app->pending_tests = g_hash_table_new (NULL, NULL);
   app->tests = g_ptr_array_new_with_free_func ((GDestroyNotify)g_object_unref);
   app->failed_test_msgs = g_ptr_array_new_with_free_func ((GDestroyNotify)g_free);
+
+  setlocale (LC_ALL, "");
 
   /* avoid gvfs (http://bugzilla.gnome.org/show_bug.cgi?id=526454) */
   g_setenv ("GIO_USE_VFS", "local", TRUE);
