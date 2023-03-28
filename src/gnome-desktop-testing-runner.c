@@ -508,7 +508,7 @@ on_test_exited (GObject       *obj,
   GError *tmp_error = NULL;
   int estatus;
   GSubprocess *proc = G_SUBPROCESS (obj);
-  GTask *task = G_TASK (user_data);
+  g_autoptr(GTask) task = G_TASK (user_data);
   GCancellable *cancellable = g_task_get_cancellable (task);
   GdtrTest *test;
   gboolean failed = FALSE;
@@ -590,7 +590,7 @@ run_test_async (GdtrTest                *test,
   g_autofree char *test_tmpname = NULL;
   g_autoptr(GSubprocessLauncher) proc_context = NULL;
   g_autoptr(GSubprocess) proc = NULL;
-  GTask *task;
+  g_autoptr(GTask) task = NULL;
   GSubprocessFlags flags = G_SUBPROCESS_FLAGS_NONE;
 
   g_assert (test->state == TEST_STATE_LOADED);
@@ -687,7 +687,7 @@ run_test_async (GdtrTest                *test,
 
   test->state = TEST_STATE_EXECUTING;
 
-  g_subprocess_wait_async (proc, cancellable, on_test_exited, task);
+  g_subprocess_wait_async (proc, cancellable, on_test_exited, g_steal_pointer (&task));
   test->timeout = g_timeout_add_seconds (opt_cancel_timeout, cancel_test, g_object_ref (proc));
 
  out:
