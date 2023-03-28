@@ -855,7 +855,7 @@ main (int argc, char **argv)
   GError **error = &local_error;
   guint total_tests = 0;
   unsigned int i, j;
-  GOptionContext *context;
+  g_autoptr(GOptionContext) context = NULL;
   TestRunnerApp appstruct;
   const char *const *datadirs_iter;
   int n_passed = 0;
