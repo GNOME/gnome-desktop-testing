@@ -1057,6 +1057,7 @@ main (int argc, char **argv)
     }
   g_clear_pointer (&app->pending_tests, g_hash_table_unref);
   g_clear_pointer (&app->tests, g_ptr_array_unref);
+  g_clear_pointer (&app->failed_test_msgs, g_ptr_array_unref);
   if (!ret)
     return 1;
   if (n_failed > 0)
