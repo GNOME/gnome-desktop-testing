@@ -286,6 +286,8 @@ static void
 gdtr_test_finalize (GObject *gobject)
 {
   GdtrTest *self = (GdtrTest*) gobject;
+
+  g_free (self->name);
   g_strfreev (self->argv);
   g_strfreev (self->envp);
   g_clear_object (&self->tmpdir);
