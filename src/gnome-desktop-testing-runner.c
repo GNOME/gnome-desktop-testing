@@ -688,7 +688,9 @@ run_test_async (GdtrTest                *test,
   test->state = TEST_STATE_EXECUTING;
 
   g_subprocess_wait_async (proc, cancellable, on_test_exited, g_steal_pointer (&task));
-  test->timeout = g_timeout_add_seconds (opt_cancel_timeout, cancel_test, g_object_ref (proc));
+  test->timeout = g_timeout_add_seconds_full (G_PRIORITY_DEFAULT,
+                                              opt_cancel_timeout, cancel_test,
+                                              g_object_ref (proc), g_object_unref);
 
  out:
   if (local_error)
