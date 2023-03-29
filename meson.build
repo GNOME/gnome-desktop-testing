@@ -59,14 +59,15 @@ endif
 
 include_dirs = include_directories('.')
 
-gio_unix_dep = dependency('gio-unix-2.0', version : '>=2.50')
+glib_req_version = '2.50'
+gio_unix_dep = dependency('gio-unix-2.0', version : '>=' + glib_req_version)
 libsystemd_dep = dependency('libsystemd', required : get_option('systemd'))
 
 cdata = configuration_data()
 cdata.set_quoted('DATADIR', get_option('prefix') / get_option('datadir'))
 cdata.set_quoted('LIBEXECDIR', get_option('prefix') / get_option('libexecdir'))
-cdata.set('GLIB_VERSION_MAX_ALLOWED', 'GLIB_VERSION_2_50')
-cdata.set('GLIB_VERSION_MIN_REQUIRED', 'GLIB_VERSION_2_50')
+cdata.set('GLIB_VERSION_MAX_ALLOWED', 'GLIB_VERSION_' + glib_req_version.underscorify())
+cdata.set('GLIB_VERSION_MIN_REQUIRED', 'GLIB_VERSION_' + glib_req_version.underscorify())
 
 if libsystemd_dep.found()
   cdata.set('HAVE_SYSTEMD', 1)
