@@ -395,6 +395,7 @@ static char * opt_report_directory;
 static char **opt_dirs;
 static char *opt_status;
 static char *opt_log_msgid;
+static char **opt_exclude;
 
 static gboolean
 parse_parallel (const char  *option_name,
@@ -432,6 +433,7 @@ static GOptionEntry options[] = {
   { "timeout", 't', 0, G_OPTION_ARG_INT, &opt_cancel_timeout, "Cancel test after timeout seconds; defaults to 5 minutes", "TIMEOUT" },
   { "quiet", 0, 0, G_OPTION_ARG_NONE, &opt_quiet, "Don't output test results", NULL },
   { "tap", 0, 0, G_OPTION_ARG_NONE, &opt_tap, "Output test results as TAP", NULL },
+  { "exclude", 'x', 0, G_OPTION_ARG_STRING_ARRAY, &opt_exclude, "Skip running tests matching these regular expressions", "PATTERN" },
   { NULL }
 };
 
@@ -450,6 +452,7 @@ gather_all_tests_recurse (GFile         *prefix_root,
                           GFile         *dir,
                           const char    *prefix,
                           GPtrArray     *tests,
+                          GPtrArray     *exclude_regexes,
                           GCancellable  *cancellable,
                           GError       **error)
 {
@@ -472,6 +475,21 @@ gather_all_tests_recurse (GFile         *prefix_root,
       GFileType type = g_file_info_get_file_type (info);
       const char *name = g_file_info_get_name (info);
       g_autoptr(GFile) child = g_file_get_child (dir, name);
+      g_autofree char *full_name = g_strconcat (suite_prefix, name, NULL);
+      gboolean is_excluded = FALSE;
+
+      for (unsigned i = 0; i < exclude_regexes->len; ++i)
+        {
+          GRegex *regex = g_ptr_array_index (exclude_regexes, i);
+          if (g_regex_match (regex, full_name, 0, NULL))
+            {
+              is_excluded = TRUE;
+              break;
+            }
+        }
+
+      if (is_excluded)
+        continue;
 
       if (type == G_FILE_TYPE_REGULAR && g_str_has_suffix (name, ".test"))
         {
@@ -483,7 +501,7 @@ gather_all_tests_recurse (GFile         *prefix_root,
       else if (type == G_FILE_TYPE_DIRECTORY)
         {
           if (!gather_all_tests_recurse (prefix_root, child, suite_prefix, tests,
-                                         cancellable, error))
+                                         exclude_regexes, cancellable, error))
             goto out;
         }
       g_clear_object (&info);
@@ -883,6 +901,7 @@ main (int argc, char **argv)
   g_autoptr(GOptionContext) context = NULL;
   TestRunnerApp appstruct;
   const char *const *datadirs_iter;
+  g_autoptr(GPtrArray) exclude_regexes = NULL;
   int n_passed = 0;
   int n_skipped = 0;
   int n_failed = 0;
@@ -928,6 +947,24 @@ main (int argc, char **argv)
   else
     app->parallel = opt_parallel;
 
+  exclude_regexes = g_ptr_array_new_with_free_func ((GDestroyNotify)g_regex_unref);
+
+  if (opt_exclude)
+    {
+      for (i = 0; opt_exclude[i]; ++i)
+        {
+          GRegex *regex = g_regex_new (opt_exclude[i], 0, 0, error);
+          if (!regex)
+            {
+              g_printerr ("Invalid regular expression specified for --exclude: %s\n",
+                          local_error->message);
+              g_clear_error (&local_error);
+              return 1;
+            }
+          g_ptr_array_add (exclude_regexes, g_steal_pointer (&regex));
+        }
+    }
+
   if (opt_dirs)
     datadirs_iter = (const char *const*) opt_dirs;
   else
@@ -943,7 +980,7 @@ main (int argc, char **argv)
         continue;
 
       if (!gather_all_tests_recurse (prefix_root, prefix_root, "", app->tests,
-                                     cancellable, error))
+                                     exclude_regexes, cancellable, error))
         goto out;
 
       if (opt_firstroot)
