@@ -108,6 +108,12 @@ If a test takes longer than \fISECONDS\fR seconds to run, terminate it.
 The default is 5 minutes (300 seconds).
 
 .TP
+\fB--exclude=\fIPATTERN\fR, \fB-x\fR \fIPATTERN\fR
+Skips suites and tests matching \fIPATTERN\fR regular expression.
+The option can be repeated, in which case a test will be skipped if it
+matches any of the \fIPATTERN\fRs.
+
+.TP
 \fIPREFIX\fR [\fIPREFIX\fR...]
 Only list or run tests that match one of these prefixes, relative to the
 .B installed-tests
