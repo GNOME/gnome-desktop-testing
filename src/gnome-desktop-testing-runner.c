@@ -737,9 +737,7 @@ run_test_async (GdtrTest                *test,
 
  out:
   if (local_error)
-    {
-      g_task_report_error (test->path, callback, user_data, run_test_async, local_error);
-    }
+    g_task_return_error (task, local_error);
 }
 
 static gboolean
