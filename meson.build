@@ -5,7 +5,7 @@ project(
   'gnome-desktop-testing',
   'c',
   version : '2021.1',
-  meson_version : '>=0.49.0',
+  meson_version : '>=0.61.0',
   default_options : [
     'warning_level=2',
   ],
@@ -90,8 +90,14 @@ install_man(
   ['gnome-desktop-testing-runner.1'],
 )
 
-meson.add_install_script(
-  'install-hook.py',
-  get_option('bindir'),
-  get_option('mandir'),
+install_symlink(
+  'ginsttest-runner',
+  install_dir: get_option('bindir'),
+  pointing_to: 'gnome-desktop-testing-runner'
+)
+
+install_symlink(
+  'ginsttest-runner.1',
+  install_dir: get_option('mandir') / 'man1',
+  pointing_to: 'gnome-desktop-testing-runner.1'
 )
