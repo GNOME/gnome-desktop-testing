@@ -18,7 +18,7 @@
 
   <homepage rdf:resource="https://wiki.gnome.org/Initiatives/GnomeGoals/InstalledTests" />
   <license rdf:resource="http://usefulinc.com/doap/licenses/lgpl" />
-  <mailing-list rdf:resource="mailto:desktop-devel-list@gnome.org" />
+  <developer-forum rdf:resource="https://discourse.gnome.org/c/platform/5" />
 
   <programming-language>C</programming-language>
 
